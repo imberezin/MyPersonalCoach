@@ -1,0 +1,72 @@
+{
+  "app": {
+    "name": "Personal Eating Coach",
+    "shortName": "Eating Coach",
+    "tagline": "Let's understand together how you eat"
+  },
+  "common": {
+    "continue": "Continue",
+    "save": "Save",
+    "cancel": "Cancel",
+    "signOut": "Sign out",
+    "loading": "One moment..."
+  },
+  "setup": {
+    "title": "Setup needed",
+    "body": "The app is not connected to Supabase yet. Add the environment variables to .env.local as described in the README and restart.",
+    "missing": "Missing: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+  },
+  "auth": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "errors": {
+      "invalid_credentials": "The email or password is incorrect.",
+      "missing_fields": "Please enter your email and password.",
+      "not_configured": "The app is not connected to Supabase yet.",
+      "unavailable": "Signing in is not possible right now. Please try again in a moment."
+    }
+  },
+  "home": {
+    "greeting": "Welcome",
+    "placeholder": "What matters most right now will show up here."
+  },
+  "interventions": {
+    "pause": {
+      "before_second_portion": "Just before a second helping, pause for a second. Then decide what feels right for you."
+    },
+    "check_hunger": {
+      "tired_or_hungry": "Before you start, stop for 10 seconds and ask: am I hungry, or just tired?",
+      "open": "Stop for 10 seconds and ask: am I hungry, or is something else going on? Hunger, tiredness, stress, or just a craving?"
+    },
+    "portion_first": {
+      "default": "Put one portion on your plate and start with it. When you finish, check whether you want more. Both answers are fine."
+    },
+    "slow_down": {
+      "utensils_between_bites": "In one meal today, try putting your utensils down between bites.",
+      "notice_before_next_bite": "Midway through the meal, before the next bite, notice how it tastes and how you feel."
+    },
+    "replace_context": {
+      "default": "This is usually a hard time of day for you. Try changing the context for a moment: move to another room or do something small and different. Then decide."
+    },
+    "micro_walk": {
+      "default": "A 5-minute walk, even just around the house. When you get back, decide again."
+    },
+    "eat_intentionally": {
+      "default": "At your next meal, sit down, put it on a plate, and take a few minutes without a screen."
+    },
+    "environment": {
+      "default": "Today, try moving what tempts you into a drawer, and put what you want to eat somewhere visible."
+    },
+    "delay": {
+      "default": "Want something? That's okay. Let's wait {delayMinutes} minutes and see if it's still there. If it is, you're welcome to enjoy it."
+    },
+    "self_compassion_recovery": {
+      "default": "Today was a bit hard, and that's okay. What matters is that you're here. We continue from the next meal."
+    },
+    "ask_instead": {
+      "default": "Just a small question: what's closest to what's happening right now? Hunger, tiredness, stress, or just a craving?"
+    }
+  }
+}

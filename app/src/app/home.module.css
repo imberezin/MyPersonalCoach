@@ -1,0 +1,36 @@
+.main {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5) var(--space-4);
+}
+
+.card {
+  inline-size: min(100%, var(--content-max));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-6) var(--space-5);
+}
+
+.card h1 {
+  font-size: var(--font-size-xl);
+}
+
+.card code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.secondary {
+  min-block-size: var(--tap-target);
+  padding-inline: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}

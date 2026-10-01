@@ -1,0 +1,286 @@
+# Personal Eating Coach — Phase 1 TODO
+
+נבנה מתוך מסמכי האפיון בתיקייה ועודכן בהתאם להחלטות של 2026-10-01 (ראה [Technology Stack.md](<Technology Stack.md>) ו-[INTERVENTIONS.md](INTERVENTIONS.md)). הפניות בסוגריים: `Screen §` = `# Personal Eating Coach.md` (מסמך המסכים המפורט), `Prod` / `UX` / `ScreenSpec` = שלושת קבצי ה"פרומפט", `Rules` = `כללי-מוצר.md`.
+
+עדיפויות לפי `Screen §32`: **P0** = Core Loop, **P1** = Behavioral Support, **P2** = Supporting. P2 לא מעכב את הניסוי.
+
+---
+
+## 0. יומן החלטות (עודכן 2026-10-01)
+
+עיקרון מנחה לכל ההחלטות הטכנולוגיות: **הכול חינם כשאפשר.**
+
+### ✅ סגור
+
+- [x] **משתמשים:** משתמש יחיד + התחברות פשוטה (Supabase Auth). RLS מהיום הראשון, כי היעד הוא 5–50 משתמשים בלי rewrite.
+- [x] **Stack (כיוון):** Next.js + TypeScript + React + CSS Modules + Design System עצמי; Supabase (Postgres, Auth, Storage, RLS); AI Gateway; Web Push / PWA-ready; Modular Monolith; פעילות ושינה ידניות. מקור: `TECHNOLOGY-STACK.md` ו-`promt-tcnolgy-stack.md`.
+- [x] **נתוני תזונה:** אין מאגר תזונה. שומרים foods + portions. מודול `nutrition` נשאר כ-interface בלבד. בלי קלוריות כברירת מחדל.
+- [x] **תמונות אוכל:** נמחקות בזמן האישור או הביטול, ונשמר רק המובנה. בדיווח שבת נמחקות אחרי אישור ה-timeline.
+- [x] **זמני שבת:** `@hebcal/core` (GPL-2.0), בצד שרת בלבד ובלי להפיץ את קוד השרת. חישוב לפי מיקום. דקות הדלקת נרות נשמרות כשדה מפורש בפרופיל.
+- [x] **Milestones:** מחושבים, כל 5 ק"ג ממשקל ההתחלה לכיוון היעד, והאחרון הוא היעד עצמו. צעד שנופל פחות מ-2.5 ק"ג מהיעד מדולג, כך ש-120 עד 99 נותן בדיוק 120, 115, 110, 105, 99 כמו במסמך (בלי הכלל הזה היה מופיע גם 100). בלי יעד מספרי אין Milestones של משקל.
+- [x] **Outcome (עודכן 2026-10-01):** שני שדות נפרדים. `helpfulness`: ממש עזר / קצת עזר / לא ממש / לא יודע. `continued_eating`: כן / לא / לא יודע, נשאל רק כשההתערבות הייתה סביב אכילה. אכילה אחרי התערבות היא לא כישלון. לניסוי: `helpfulness` + `tried` ("לא יצא לי לנסות" = `tried = NO`).
+- [x] **ספי דפוס (קבועים שאפשר לכוונן):** Early Signal = 2 מקרים. Candidate = 3 מקרים בימים שונים. Validated = 5 מקרים על פני שבועיים לפחות, או Candidate + "כן" מהמשתמש (לפחות 3 מקרים). אישור משתמש לבדו אף פעם לא מספיק.
+- [x] **סיום First Week מוקדם:** לפחות 5 ימים זמינים ולפחות 10 ארוחות מאושרות. מקסימום 15 ימים זמינים.
+- [x] **מסכים חסרים, מקופלים למצבים קיימים:** First Week Recovery = הודעת חזרה ב-Home (כמו `G4`). End of Day = כרטיס אופציונלי ב-Home בערב. Pattern Confirmation = כרטיס `F5`. Milestone = כרטיס ב-Progress + הישג contextual ב-Home.
+- [x] **קלט קולי:** אחרי הלולאה המרכזית ולפני דיווח שבת. P0 = טקסט + תמונה.
+- [x] **אנליטיקס:** טבלת events ב-Postgres + `track()` wrapper (חינם, בלי צד שלישי על נתוני אוכל ומשקל). PostHog אופציונלי בהמשך.
+- [x] **מסמכים:** יוצרים רק את מסמך ה-Tech Stack, אחרי המחקר. שלושת הפרומפטים האחרים נשארים כפי שהם. מקור העבודה = מסמך המסכים המפורט + ה-TODO הזה.
+- [x] **נפתר לפי הכלל "ההחלטה החדשה גוברת" (אפשר להתנגד):**
+  - Home states: Morning, After Meal Report, Before Known Risk Context, Good Day, Difficult Day, Evening, Before Shabbat, Motzei Shabbat, Nothing Important / Silence. ("Meal Confirmation" הוא flow ולא state.)
+  - Achievements ו-Activity Feed: contextual, משולבים ב-Home, בלי מדור גביעים.
+  - Stress: 1–5 + context אופציונלי + טקסט/קול חופשי.
+  - התראות: 5 סוגים (Coach, דיווח ארוחות, פעילות, שקילה שבועית, סיכום שבועי) + quiet hours.
+  - סוגי `OfflinePeriod`: SHABBAT, HOLIDAY, USER_DEFINED. VACATION כסוג עתידי בלבד (מופיע רק במסמכי ה-stack).
+
+### ✅ אושר ב-2026-10-01 (מחקר טכנולוגי, פרטים ב-[Technology Stack.md](<Technology Stack.md>))
+
+- [x] **ספק AI:** שכבת AI Gateway עם שני adapters (Gemini ו-Groq). ה-bake-off על 20 תמונות ו-20 תיאורים בעברית יקבע את הראשי.
+- [x] **פרטיות AI:** מותר להעביר את הנתונים שלך ב-Gemini החינמי (גוגל עשויה להשתמש בתוכן ולהעביר אותו לבדיקה אנושית). חל על הנתונים שלך בלבד. נתוני משתמשים נוספים לא עוברים בשכבה החינמית. בתמונות להימנע מפנים ומאנשים אחרים.
+- [x] **תמלול קול:** הקלטה במכשיר ותמלול בשרת (`SpeechRecognition` לא קיים באפליקציה שהותקנה באייפון). מועמדים: Groq Whisper, Gemini, Azure Speech F0, Cloudflare Workers AI.
+- [x] **תזמון:** Supabase `pg_cron` + `pg_net` שקורא ל-`/api/engine/tick`. ה-cron של Vercel Hobby רץ פעם ביום בלבד.
+- [x] **התחברות:** אימייל + סיסמה, הרשמה ציבורית כבויה (מייל הכניסה המובנה מוגבל ל-2 בשעה).
+- [x] **תמונות:** העברה בזיכרון השרת בלי לשמור. Storage זמני רק לאצווה גדולה (דיווח שבת), עם מחיקה דרך ה-API.
+- [x] **אחסון:** Vercel Hobby (שימוש אישי, לא מסחרי).
+- [x] **גיבוי:** `supabase db dump` שבועי (ב-Free אין גיבוי אוטומטי).
+- [x] **Push:** `web-push` עם VAPID, ומסך "הוסף למסך הבית" לפני בקשת ההרשאה באייפון.
+- [x] **"יום זמין":** פחות מ-50% ממנו Offline. שישי בדרך כלל נספר, שבת לא.
+- [x] **"השבוע שלך":** מופיע אחרי אישור דיווח מוצאי שבת, אחרת בבוקר ראשון.
+- [x] **ספריית ההתערבויות (אושרה ב-2026-10-01, גרסה 1.1):** 11 התערבויות ב-[INTERVENTIONS.md](INTERVENTIONS.md) (Next Bite מוזג ל-Slow Down). **המנוע בוחר מפתח ווריאנט, וה-AI רק מתאים ניסוח** בלי לשנות פעולה, היקף או מגבלות. תוצאות המנוע: `DO_NOTHING` / `ASK` / `INTERVENTION`. רק proactive נספר בתקציב של אחת ביום. cooldown של 14 יום לפי התערבות + הקשר אחרי "לא ממש" פעמיים ברציפות. ברעב אמיתי לפני אכילה אין התערבות. `self_compassion_recovery` רק ב-mode של RECOVERY. לשון זכר ב-Phase 1. כלל בטיחות לא נכלל ב-Phase 1 ויש לשקול אותו לפני שמוסיפים משתמשים.
+
+### ⏳ ממתין
+
+- [ ] **Bake-off בעברית** לבחירת ספק ה-AI הראשי, ואימות ש-Groq תומך בתמונה יחד עם JSON schema ושהוא זמין בישראל.
+- [ ] **אימות `pg_cron`** בתוכנית Free של Supabase כשהפרויקט נוצר (אחרת Cloudflare Workers cron).
+- [ ] **שאלות פתוחות נוספות:** `Technology Stack.md` פרק 21 (דקות הדלקת נרות לפי עיר, מקום לגיבוי, מגבלות גודל בקשה, ספק תמלול).
+
+---
+
+## 1. תשתית (Foundation)
+
+> **סטטוס, 2026-10-01:** שלד האפליקציה נבנה בתיקייה `app/` (Next.js 16.3.8). עברו: 119 בדיקות (69 לוגיקה ו-50 בדיקות RLS על Postgres אמיתי), lint, בדיקת טיפוסים ו-`next build`. כל מה שדורש חשבון, מפתח או סוד (Supabase, GitHub, Vercel) ממתין לך. ראה [SETUP-CHECKLIST.md](SETUP-CHECKLIST.md).
+
+### נבנה
+
+- [x] **PWA:** `app/manifest.ts`, `public/sw.js` (Push בלבד; כל push מציג התראה גלויה, כנדרש באייפון), אייקונים זמניים (`npm run icons`).
+- [x] **RTL/LTR + i18n:** עברית ואנגלית, `dir` ו-`lang` לפי השפה, טוקנים עם תכונות CSS לוגיות. נבנה על `use-intl` ולא על `next-intl`, כי התוסף של `next-intl` טוען `@swc/core` שלא עולה על הפרופיל של המחשב הזה (בדיקת הרשאות קפדנית על `AppData\Local\swc`).
+- [x] **מודל נתונים:** מיגרציה `supabase/migrations/20261001000000_init.sql`, 21 טבלאות ו-RLS בכולן: `profiles`, `user_preferences`, `offline_periods`, `meal_raw_inputs` → `meal_understandings` → `meal_entries`, משקל / פעילות / שינה / לחץ, `events`, `patterns` + `pattern_evidence`, `intervention_instances`, `experiments` (אחד פעיל לכל היותר), `weekly_summaries`, `push_subscriptions`, `notification_log`, `ai_requests`, `app_errors`, `audit_log`. פרופיל נוצר אוטומטית בהרשמה, ומחיקת משתמש מוחקת הכול.
+- [x] **בדיקות RLS** על Postgres אמיתי (PGlite, בלי Docker): משתמש אחר לא קורא, לא משנה ולא מוחק; `anon` ללא גישה; RLS פעיל בכל טבלה; טבלאות שנכתבות רק מהשרת. נבדק שהבדיקות באמת תופסות דליפה.
+- [x] **לוגיקה דטרמיניסטית** ב-`src/domain` עם בדיקות: `isOffline` ו"יום זמין" (פחות מ-50% Offline, כולל ימי DST של 23 ו-25 שעות), First Week (5 / 10 ארוחות / 15), Milestones, מחזור חיי דפוס, ומחזור חיי המשתמש.
+- [x] **ספריית ההתערבויות** ב-`src/domain/interventions/library.ts`: 11 התערבויות עם timing, וריאנטים ו-constraints, וטקסטים בעברית ובאנגלית. בדיקות מוודאות, בין היתר, שאין שפת בושה ושיש טקסט לכל וריאנט.
+- [x] **שכבת AI** (`src/lib/ai`): `AIGateway` עם fallback לפי סדר, timeout, אימות סכמה, ניסיון חוזר אחד, ולעולם לא זורק. כרגע עם `FakeAIProvider` בלבד.
+- [x] **אנליטיקס** (`src/lib/analytics`): `track()` + 15 האירועים, שחוסם תוכן חופשי. כותב לטבלת `events`.
+- [x] **Push בצד שרת** (`src/lib/notifications`): `WebPushProvider` עם VAPID.
+- [x] **זמני שבת** (`src/lib/shabbat`): `@hebcal/core` בצד שרת בלבד (`server-only` + כלל lint), ברירות מחדל לדקות הדלקת נרות. נבדק גם כשהמכונה ב-UTC או באזור זמן אחר.
+- [x] **התחברות:** אימייל וסיסמה (Supabase Auth), `src/proxy.ts` (ב-Next 16 `middleware` נקרא `proxy`), מסך כניסה בעברית, ומסך "צריך להשלים הגדרה" כשאין עדיין חיבור.
+- [x] **נתיב Cron:** `/api/engine/tick` מחזיר 503 בלי `CRON_SECRET` ו-401 בלי header נכון.
+- [x] **CI:** `.github/workflows/ci.yml` (lint, טיפוסים, בדיקות, build). עוד לא רץ, כי אין remote.
+
+### נשאר לבנות
+
+- [ ] **Mobile-first layout** וניווט תחתון: `Home | Progress | Report | Coach | Me`, כש-Report פותח Bottom Sheet. נבנה עם Home.
+- [ ] **ממשק `ActivityDataSource`** (העמודה `source` קיימת; הממשק עצמו עוד לא).
+- [ ] **Behavior Engine:** הפונקציה הטהורה `decide(input, now)` (Context → Eligibility → Cooldown → Gates → אחת / ASK / DO_NOTHING), בדיקות לכללים (תקציב, cooldown לפי התערבות + הקשר, רעב אמיתי לפני אכילה, Offline גובר).
+- [ ] **Adapters ל-Gemini ול-Groq**, מזהי המודלים בקונפיגורציה ולא בקוד (`gemini-3.1-flash-lite` נסגר ב-2027-05-07), תקרת קריאות יומית, רישום ל-`ai_requests` ול-`app_errors`.
+- [ ] **Bake-off בעברית:** סקריפט שחוזר על עצמו, 20 תמונות אוכל + 20 תיאורים, יעד: לפחות 85% מובנה בלי תיקון משמעותי. לפני בניית מסך האישור.
+- [ ] **דחיסת תמונה במכשיר** (בערך 1024px לצד הארוך, JPEG 0.8). תמונה בודדת עוברת בזיכרון השרת ולא נשמרת; Storage זמני רק לאצווה גדולה, עם מחיקה דרך ה-API ו-job שמנקה מה שישן מ-24 שעות.
+- [ ] **Push בצד לקוח:** רישום ה-service worker, מסך "הוסף למסך הבית" באייפון, ובקשת הרשאה רק אחרי לחיצה.
+- [ ] **Job שבועי:** כותב את שבת הבאה כ-`offline_periods` מתוך `computeNextShabbat`.
+- [ ] **גיבוי שבועי** של בסיס הנתונים (`supabase db dump`) למקום פרטי.
+- [ ] **ניטור מכסות:** סקירה חודשית של מכסות חינמיות ותאריכי סגירת מודלים.
+
+### ממתין לפעולות שלך
+
+(חשבונות, מפתחות וסודות. פירוט מלא ב-[SETUP-CHECKLIST.md](SETUP-CHECKLIST.md).)
+
+- [ ] פרויקט Supabase (Free) והעתקת המפתחות ל-`app/.env.local`
+- [ ] הרצת המיגרציה, יצירת המשתמש שלך מהדשבורד, וכיבוי הרשמה ציבורית
+- [ ] `CRON_SECRET` ומפתחות VAPID
+- [ ] repo ב-GitHub על החשבון האישי (Vercel Hobby לא מתחבר ל-repos של ארגון)
+- [ ] Vercel: ייבוא ה-repo עם Root Directory = `app` והזנת משתני הסביבה
+- [ ] `pg_cron` שקורא ל-`/api/engine/tick` (ואימות שהוא זמין ב-Free)
+- [ ] להפעיל Docker Desktop ולהריץ `supabase start` פעם אחת, כבדיקה מול הסביבה האמיתית של Supabase (ה-RLS נבדק ב-PGlite)
+
+---
+
+## 2. P0 — Core Loop
+
+### 2.1 Onboarding (A1–A12)
+- [ ] A1 Welcome
+- [ ] A2 Goal (בחירה מרובה, "עדיין לא בטוח" תקף)
+- [ ] A3 Weight (נקודת פתיחה, בלי שיפוטיות)
+- [ ] A4 Goal Weight (או "בלי יעד מספרי")
+- [ ] A5 Age + Height
+- [ ] A6 Activity Baseline (לא להציג את ה-60 דק' כדרישה)
+- [ ] A7 Food Preferences (קליל; המערכת לומדת עם הזמן)
+- [ ] A8 Kashrut (בלי פסיקת הלכה; הפרדה בין Nutrition data ל-Kashrut metadata)
+- [ ] A9 Shabbat / Offline (יוצר `OfflinePeriod`)
+- [ ] A10 Motivation (אופציונלי, אפשר לדלג)
+- [ ] A11 Notifications (לא להניח שהכול רצוי; 5 סוגי התראות + quiet hours בהגדרות; באייפון קודם "הוסף למסך הבית")
+- [ ] A12 Complete → `ONBOARDING_COMPLETE → FIRST_WEEK_STARTED → HOME`
+- [ ] לוודא שזה לא מרגיש כשאלון ארוך
+
+### 2.2 Report + Food Reporting (C3, D1–D8)
+- [ ] Report Bottom Sheet: אוכל / פעילות / משקל / שינה / איך אני מרגיש + צילום / כתיבה (דיבור נכנס אחרי הלולאה המרכזית)
+- [ ] אפשרות לדלג על קטגוריה — המערכת מנסה להבין את סוג האירוע
+- [ ] D2 Photo input (+ טקסט אופציונלי)
+- [ ] D3 Text input
+- [ ] D4 Voice input + תמלול — **לא ב-P0**: אחרי הלולאה המרכזית ולפני דיווח שבת (הקלטה במכשיר ותמלול בשרת)
+- [ ] D5 מצב עיבוד ("מנסה להבין מה אכלת...")
+- [ ] D6 מסך אישור במסך אחד: "זה מה שהבנתי" + foods + portions + `[ משהו לא נכון? תיקון ]` `[ ✓ שמור ]`; קלוריות/מאקרו לא במרכז
+- [ ] D7 עריכה (אוכל, מנה, סוג ארוחה, שעה) וחזרה לאישור
+- [ ] D8 Saved + שאלת הקשר אופציונלית ("איך הרגשת אחרי הארוחה?") — מוצגת רק כשהמערכת מחליטה שזה שימושי
+- [ ] AI מביע אי-ודאות ולא ממציא אוכל; אומדן מנות מסומן כאומדן
+
+### 2.3 First Week (B1–B6, §6)
+- [ ] מצב פנימי (המשתמש לא רואה "יום 9 מתוך 15")
+- [ ] כללי מעבר: יום זמין = פחות מ-50% ממנו Offline. סיום מוקדם = לפחות 5 ימים זמינים ולפחות 10 ארוחות מאושרות. מקסימום 15 ימים זמינים; אחרי 15 בלי מספיק מידע עוברים בלי שפת כישלון
+- [ ] B1 Start (בלי score / אחוזים / ימים שהוחמצו)
+- [ ] B2/B3 משוב מיידי אחרי פעולה משמעותית ("קיבלתי. כבר התחלתי להבין קצת איך אתה אוכל.")
+- [ ] B4 Early Signal (נשמע לי נכון / לא בטוח / לא קשור) — לא מקדמים ל-Pattern רק בגלל אישור משתמש
+- [ ] B5 ניסוי קטן ראשון (אופציונלי, אחד בלבד)
+- [ ] B6 First Week Summary — שונה מ-Weekly Summary: What you did / What we noticed / Meaningful moment / Next experiment או No experiment. לא "סיימת בהצלחה" אלא "כבר הכרנו קצת"
+- [ ] First Week Recovery (חזרה אחרי היעדרות, בלי שפת החמצה)
+
+### 2.4 Home (C1, §18)
+- [ ] Home מבוסס state, לא Dashboard: "מה הכי יעזור לי עכשיו?"
+- [ ] מצבים: Morning, After Meal Report, Before Known Risk Context, Good Day, Difficult Day, Evening, Before Shabbat, Motzei Shabbat, **Nothing Important / Silence**
+- [ ] כשאין מה להגיד — לא ממציאים התערבות ("הכול בסדר...")
+- [ ] Activity Feed משולב ב-Home (לא רשת חברתית)
+
+### 2.5 Weekly Learning (H1–H5, §24)
+- [ ] תהליך סוף שבוע: איסוף נתונים → החרגת Offline → אירועים משמעותיים → "סיפור השבוע" → דפוס מאומת? → ניסוי אחד. מופיע אחרי אישור דיווח מוצאי שבת, אחרת בבוקר ראשון
+- [ ] H2 מצב פתיחה: Celebrate / Learn / Recover / Reset (Reset = חוסר מידע, לא כישלון)
+- [ ] H3 "השבוע שלך": What happened → What we learned → What next; בלי score
+- [ ] H4 Weekly Experiment: מקסימום אחד, התנהגותי, קטן, אופציונלי, עדיפות לניסוי שנובע מדפוס אישי; "בלי ניסוי" אפשרי
+- [ ] H5 Experiment Result — מודדים usefulness, לא ציות/הצלחה
+
+---
+
+## 3. P1 — Behavioral Support
+
+### 3.1 Difficult Moment + Intervention (F1–F5, §22)
+- [ ] F1 "אני איתך. מה קורה עכשיו?" (רעב / לחץ / עייפות / מתחשק לי / לא יודע / פשוט לדבר)
+- [ ] F2 זיהוי Context (רעב אמיתי, לחץ, עייפות, craving, חברתי, סביבה, הרגל, לא ברור) — בלי להניח ודאות
+- [ ] F3 ספריית התערבויות מבוקרת (11 סוגים, ראה [INTERVENTIONS.md](INTERVENTIONS.md)) — בחירת **אחת** בלבד, או DO NOTHING
+- [ ] F4 Intervention Outcome (נתון למידה) — שאלה ראשית "איך זה עזר?" (`helpfulness`), ושאלה שנייה "אכלת בסוף?" (`continued_eating`) רק כשההתערבות הייתה סביב אכילה. המסך כבר מעודכן במסמך המסכים.
+- [ ] F5 Pattern Candidate אחרי evidence חוזר
+- [ ] מחזור חיי Pattern: Observation → Repeated Evidence → Candidate → User Confirmation / Strong Evidence → Validated
+
+### 3.2 Bad Day / Recovery (G1–G4, §23)
+- [ ] G1 "היום היה קצת קשה. רוצה לדבר על זה?"
+- [ ] G2 Trigger
+- [ ] G3 Recovery — בלי ענישה, פיצוי, צום, "מתחילים מחדש"; ממשיכים מהארוחה הבאה. תגובה לא-ענישתית גם לטקסט חופשי ("הרסתי את היום")
+- [ ] G4 Return — חזרה אחרי יום קשה נרשמת כאירוע חיובי משמעותי
+- [ ] Recovery הוא capability, לא מדור ניווט
+- [ ] End of Day — אופציונלי, רק כשיש מה לשקף
+
+### 3.3 Progress (I1–I6)
+- [ ] I1 Overview: איפה אני → מה השתנה → מה למדנו → מה הצעד הבא
+- [ ] I2 Weight Trend שבועי (7/30/90 יום), טרנד ולא תנודות יומיות
+- [ ] I3 Milestones (אבני דרך מוטיבציוניות, לא עובר/נכשל). מחושבים: כל 5 ק"ג ממשקל ההתחלה לכיוון היעד, האחרון הוא היעד. בלי יעד מספרי אין Milestones של משקל
+- [ ] I4 Behavior Progress לפי תחום, **בלי ציון מסכם אחד**
+- [ ] I5 Learned Patterns עם evidence/הקשר
+- [ ] I6 Plateau — הצגת שינויים התנהגותיים, בלי המלצה אוטומטית להגבלה
+- [ ] בלי: דגש על שקילה יומית, score, ranking, ציון טוב/רע
+
+### 3.4 Shabbat / Offline (J1–J9, §21)
+- [ ] `OfflinePeriod` גנרי, מוטמע בכל מקום (First Week, חישובי adherence, streak, התראות)
+- [ ] J1 Shabbat Approaching → J2 בחירת ניסוי קטן (או בלי) → J3 "שבת שלום"
+- [ ] J4 מצב Offline: התראות / תזכורות / התערבויות / דיווח ארוחות כבויים; streak לא נפגע; יעדים יומיים מושהים; adherence מוחרג
+- [ ] J5 Motzei Shabbat Welcome (קל)
+- [ ] J6 דיווח מרוכז חופשי (טקסט / קול / תמונות) — לא דיווח לכל ארוחה
+- [ ] J7 AI מארגן לפי רצף אירועים צפוי (ליל שבת, בוקר, קידוש, סעודות...)
+- [ ] J8 אירוע שלא הובן מוצג כ-missing עם `[ ✎ הוספה ]` — לא ממציאים
+- [ ] J9 אישור timeline; רק אחרי אישור נוצרים MealEntries
+- [ ] עקרון: ככל שהאירוע רחוק יותר בזמן — דיווח חופשי ומרוכז יותר והמערכת מארגנת יותר
+
+### 3.5 Other reports (E1–E4)
+- [ ] E1 Activity ידני (סוג + משך, בלי GPS); התקדמות: שבוע 1 baseline, 15, 20, 25, 30 (שבועות 5–6), 40, 50, 60 (שבועות 11–12); אפשר לפצל להליכות
+- [ ] E2 Weight שבועי כברירת מחדל, בלי עידוד לשקילה יומית
+- [ ] E3 Sleep (איכות + שעות בקירוב; בלי "חייב 8 שעות")
+- [ ] E4 Stress 1–5 + context אופציונלי; בלי שאלון
+
+---
+
+## 4. Notifications (Web Push)
+
+- [ ] Android: Browser/PWA → Web Push
+- [ ] iPhone: Web App → Add to Home Screen → PWA → הרשאת התראות → Web Push (כולל מסך הדרכה להתקנה)
+- [ ] הגדרות = העדפות, לא הוראה לשלוח. עץ החלטה: יש סיבה אמיתית? → Offline Period? → כבר התערבנו לאחרונה? → רק אז לשלוח
+- [ ] Quiet hours
+- [ ] התראות לא כחוויה נפרדת — הרחבה של ה-Behavior Engine (`§17`)
+
+---
+
+## 5. P2 — Supporting
+
+- [ ] **Coach (C4):** דבר איתי / מה למדנו עליך / הניסוי השבועי / השיחות שלנו; נושאים מהירים (אוכל, הליכה, שינה, מתח ורעב, התקדמות, משהו אחר); טקסט וקול; משתמש בהקשר ולא ממציא עובדות
+- [ ] **Me / Profile (K1–K9):** פרטים אישיים, מטרה, העדפות אוכל, כשרות, פעילות, הגדרות שבת, שפה, התראות, פרטיות
+- [ ] **Privacy (K9):** מה נשמר, ייצוא, מחיקת חשבון/נתונים, מדיניות שמירת תמונות
+- [ ] **Achievements:** contextual בלבד, לא ענישתי, בלי מדור גביעים
+- [ ] **Streaks (L3):** על התנהגות משמעותית, שבת לא שוברת, grace/freeze, יום רע אחד לא מוחק הכול, לא מטרת המוצר
+- [ ] בלי רשת חברתית ובלי gamification מורכב ב-Phase 1
+
+---
+
+## 6. חוצה-מסכים (Cross-cutting)
+
+- [ ] **Loading (`§25`):** שפה אנושית, לא טכנית; אפשר ביטול כשבטוח; **לעולם לא לזרוק קלט משתמש**
+- [ ] **Error (`§26`):** תמיד recoverable עם fallback ("נסה שוב / כתוב במקום"); אף פעם "AI failed"
+- [ ] **Empty (`§27`):** להסביר מה יקרה הלאה, לא "אין נתונים"
+- [ ] **Unknown (`§28`):** "אני עדיין לא יודע" עדיף על המצאה
+- [ ] **בדיקת שפה (copy lint):** לא להשתמש ב-failed / ruined / missed target / start over / compensation וכו' (`§2.6`); להעדיף noticed / learned / tried / returned
+- [ ] **תוכן ראשוני:** כל הטקסטים בעברית (המסמך כבר מכיל דוגמאות) + תרגום לאנגלית
+- [ ] לא מסכים חדשים כשאפשר state קיים (`§33`)
+
+---
+
+## 7. בדיקות וקבלה
+
+- [ ] בדיקת כל מסך מול Design Review Checklist (`§34`): Purpose / User / Information / Emotion / Context / AI / Recovery
+- [ ] תרחישי קצה לכל מסך: משתמש לא עושה כלום, יוצא באמצע, ה-AI נכשל, חוזר אחרי יום קשה
+- [ ] בדיקת First Week: 5 ימים עם מידע מספיק, 15 ימים בלי מידע, ימי Offline באמצע
+- [ ] בדיקת Shabbat מקצה לקצה: הכנה → Offline בלי שום התראה → דיווח מרוכז → missing → אישור
+- [ ] בדיקת שפה: RTL/LTR בכל המסכים
+- [ ] iOS PWA: התראות בפועל אחרי "Add to Home Screen"
+- [ ] מדדי הצלחה (`Prod §18`) — להגדיר איך מודדים: reporting coverage, חיכוך דיווח נמוך, הבנת AI, שימושיות התערבויות, גילוי דפוסים, recovery, עקביות, התנהגות בשבת, "לא מרגיש כמו דיאטה"
+
+---
+
+## 8. סדר עבודה מוצע
+
+לפי `§36`, קבוצה אחרי קבוצה, ורק אחרי אישור קבוצה עוברים הלאה:
+
+1. סגירת החלטות פתוחות (סעיף 0)
+2. תשתית (סעיף 1)
+3. Onboarding
+4. First Week
+5. Home
+6. Report / Food Reporting
+7. Weekly Learning
+8. Progress
+9. Difficult Moment / Recovery
+10. Shabbat
+11. Coach
+12. Profile / Settings
+
+לכל קבוצה: Flow → Screens → States → User actions → System behavior → Edge cases → ASCII wireframes → Final UX decision.
+
+> שלבים 3–7 הם ה-P0 (על גבי החלטות ותשתית); 8–10 הם P1; 11–12 הם P2.
+
+---
+
+## עקרונות מוצר (תזכורת — `כללי-מוצר.md`)
+
+1. המשתמש מדווח — המערכת מארגנת ומבינה.
+2. המערכת מציעה — המשתמש מחליט.
+3. פעולה אחת קטנה עדיפה על רשימת משימות.
+4. אין ציון, אין ענישה על יום רע, אין צורך לדווח כל הזמן.
+5. אם אין מה להגיד — שותקים.
+6. דפוס דורש ראיות; אירוע בודד הוא Observation.
+7. AI לא ממציא עובדות ולא מחליף את מקור האמת.
+8. משקל חשוב אבל לא היחיד. שבת היא Offline Period אמיתי.
+9. ככל שהאירוע רחוק יותר — דיווח חופשי יותר, יותר ארגון מהמערכת.
+10. First Week בונה אמון; הבאים אחריו בונים שינוי.
+11. המערכת לומדת מהמשתמש ולא כופה שיטת תזונה.
+12. מטרת כל אינטראקציה: להחליט טוב יותר כשזה רלוונטי, לא לעשות יותר.
