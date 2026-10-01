@@ -85,9 +85,9 @@ npx web-push generate-vapid-keys
 
 ## 4. GitHub
 
-צור repository **פרטי** בחשבון **האישי** שלך (Vercel Hobby לא מתחבר ל-repos של ארגון).
+נעשה: ה-repo הוא `imberezin/MyPersonalCoach` בחשבון **האישי** (Vercel Hobby לא מתחבר ל-repos של ארגון). הוא **ציבורי**, בהחלטתך מ-2026-10-01, והקוד כבר עלה ל-`main`.
 
-אחרי שיש repo, תגיד לי ואבצע `git init`, commit ו-push. עוד לא עשיתי את זה, כי זה מפרסם קוד לשירות חיצוני ורציתי את אישורך.
+ה-CI (`.github/workflows/ci.yml`) רץ על כל push ל-`main` ועל כל pull request: lint, בדיקת טיפוסים, בדיקות ו-build.
 
 ## 5. Vercel (חינם, שימוש אישי)
 
@@ -118,17 +118,9 @@ curl.exe -X POST https://YOUR-APP.vercel.app/api/engine/tick -H "Authorization: 
 
 התשובה הצפויה: `{"ok":true,...}`. בלי ה-header התשובה היא 401.
 
-## 7. אופציונלי: בדיקה מול Supabase מקומי
+## 7. בדיקה מול Supabase מקומי
 
-ה-RLS כבר נבדק על Postgres אמיתי (PGlite). אם תרצה בדיקה נוספת מול הסביבה המלאה של Supabase: הפעל את Docker Desktop, ואז:
-
-```powershell
-npx supabase init
-```
-
-```powershell
-npx supabase start
-```
+נעשה, ראה סעיף 1ב: `npm run local:start` מפעיל את הסביבה המלאה של Supabase בתוך Docker (ה-`init` כבר בוצע, והתצורה ב-`app/supabase/config.toml`). ה-RLS נבדק גם על PGlite (`npm test`) וגם על תמונת Supabase האמיתית.
 
 ## תקלות נפוצות
 

@@ -6,6 +6,22 @@
 
 ---
 
+## סטטוס עכשיו (2026-10-01)
+
+- ✅ **בוצע:** כל התשתית שלפני המסכים: שלד האפליקציה, בסיס נתונים עם RLS, הלוגיקה הדטרמיניסטית עם בדיקות, הרצה מקומית מלאה, ו-repo ב-GitHub (`main` מעודכן, commit `7dbf8ea`). פירוט: סעיף 1, "נבנה".
+- **בעבודה עכשיו:** סעיף 2.1, Onboarding (A1–A12).
+- **הבא בתור, לפי סדר מימוש (הוחלט ב-2026-10-01, ראה סעיף 0):**
+  1. Home + ניווט תחתון (סעיף 2.4): זה היעד של A12 (`FIRST_WEEK_STARTED → HOME`)
+  2. Report + Food: טקסט ותמונה קודם, קול אחר כך (סעיף 2.2). לפני מסך האישור D6 צריך את ה-adapters של Gemini ו-Groq ואת ה-bake-off בעברית (סעיף 1, "נשאר לבנות")
+  3. First Week (סעיף 2.3): B2–B6 דורשים דיווחים אמיתיים, ולכן הם אחרי Report + Food
+  4. Weekly Learning (סעיף 2.5)
+  - לפי הצורך לאורך הדרך (סעיף 1, "נשאר לבנות"): `decide()` ב-Behavior Engine, Push בצד לקוח עם מסך "הוסף למסך הבית" (A11 כבר צריך אותו), Job שבועי לשבת הבאה, וגיבוי שבועי.
+  - סעיף 8 (לפי `§36`) נשאר סדר העיצוב והאפיון, לא סדר המימוש.
+- ✅ **אומת:** ריצת ה-CI ב-GitHub ירוקה על `7dbf8ea` (ריצה `36843864246`: lint, בדיקת טיפוסים, בדיקות ו-build).
+- **רק אתה:** חשבונות וסודות (Supabase, Vercel, `pg_cron`, `CRON_SECRET`, VAPID) וכלל הבטיחות לפני משתמש שני. הרשימה המלאה: סעיף 1, "ממתין לפעולות שלך". החלטות מוצר פתוחות: סעיף 0, "ממתין".
+
+---
+
 ## 0. יומן החלטות (עודכן 2026-10-01)
 
 עיקרון מנחה לכל ההחלטות הטכנולוגיות: **הכול חינם כשאפשר.**
@@ -31,6 +47,8 @@
   - Stress: 1–5 + context אופציונלי + טקסט/קול חופשי.
   - התראות: 5 סוגים (Coach, דיווח ארוחות, פעילות, שקילה שבועית, סיכום שבועי) + quiet hours.
   - סוגי `OfflinePeriod`: SHABBAT, HOLIDAY, USER_DEFINED. VACATION כסוג עתידי בלבד (מופיע רק במסמכי ה-stack).
+  - **סדר מימוש (נקבע ב-2026-10-01 בהאצלת סמכות מהמשתמש):** Onboarding → Home + ניווט → Report + Food → First Week → Weekly Learning. לפי תלויות: Home הוא היעד של A12, ו-B2–B6 דורשים דיווחים אמיתיים. סעיף 8 נשאר סדר העיצוב.
+- [x] **מיתוג (החלטת המשתמש, 2026-10-01):** קבצי הלוגו ב-`app/public/MyIcons/` הם המיתוג. משמשים **גם** לאייקוני ה-PWA וה-favicon **וגם** כלוגו בתוך האפליקציה (מסך כניסה וכותרת). הבאנר מיועד ל-A1 Welcome. הצבעים ב-`src/styles/tokens.css` נגזרים מהם (במקום הערכים הזמניים).
 
 ### ✅ אושר ב-2026-10-01 (מחקר טכנולוגי, פרטים ב-[Technology Stack.md](<Technology Stack.md>))
 
@@ -57,7 +75,7 @@
 
 ## 1. תשתית (Foundation)
 
-> **סטטוס, 2026-10-01:** שלד האפליקציה נבנה בתיקייה `app/` (Next.js 16.3.8). עברו: 119 בדיקות (69 לוגיקה ו-50 בדיקות RLS על Postgres אמיתי), lint, בדיקת טיפוסים ו-`next build`. כל מה שדורש חשבון, מפתח או סוד (Supabase, GitHub, Vercel) ממתין לך. ראה [SETUP-CHECKLIST.md](SETUP-CHECKLIST.md).
+> **סטטוס, 2026-10-01:** שלד האפליקציה נבנה בתיקייה `app/` (Next.js 16.3.8). עברו: lint, בדיקת טיפוסים ו-119 בדיקות (69 לוגיקה ו-50 בדיקות RLS על Postgres אמיתי) הורצו מקומית ב-2026-10-01, וריצת ה-CI בענן ירוקה (`36843864246`, commit `7dbf8ea`) כולל `next build`. כל מה שדורש חשבון, מפתח או סוד (Supabase, Vercel) ממתין לך; GitHub כבר נעשה. ראה [SETUP-CHECKLIST.md](SETUP-CHECKLIST.md).
 
 ### נבנה
 
@@ -73,10 +91,12 @@
 - [x] **זמני שבת** (`src/lib/shabbat`): `@hebcal/core` בצד שרת בלבד (`server-only` + כלל lint), ברירות מחדל לדקות הדלקת נרות. נבדק גם כשהמכונה ב-UTC או באזור זמן אחר.
 - [x] **התחברות:** אימייל וסיסמה (Supabase Auth), `src/proxy.ts` (ב-Next 16 `middleware` נקרא `proxy`), מסך כניסה בעברית, ומסך "צריך להשלים הגדרה" כשאין עדיין חיבור.
 - [x] **נתיב Cron:** `/api/engine/tick` מחזיר 503 בלי `CRON_SECRET` ו-401 בלי header נכון.
-- [x] **CI:** `.github/workflows/ci.yml` (lint, טיפוסים, בדיקות, build). עוד לא רץ, כי אין remote.
+- [x] **CI (הגדרה):** `.github/workflows/ci.yml` (lint, טיפוסים, בדיקות, build). הריצה הראשונה ב-GitHub נכשלה בשלב typecheck (`Cannot find name 'LayoutProps'`) כי ב-checkout נקי אין עדיין טיפוסי ה-routes ש-Next מייצר. תוקן: `typecheck` מריץ קודם `next typegen` (commit `7dbf8ea`, נדחף ל-`main`). בסשן הקודם נבדק על checkout נקי עם `npm ci`: lint, טיפוסים, 119 בדיקות ו-build עוברים. ריצת ה-CI בענן אחרי התיקון ירוקה: ריצה `36843864246`, כל השלבים כולל build.
+- [x] **הרצה מקומית מלאה** (`npm run local:start` + `local:setup` + `dev`, פירוט ב-[SETUP-CHECKLIST.md](SETUP-CHECKLIST.md) סעיף 1ב): Supabase בתוך Docker, המיגרציה הוחלה על תמונת Postgres האמיתית של Supabase (21 טבלאות, RLS בכולן), משתמש פיתוח נוצר, פרופיל נוצר אוטומטית, כניסה ויציאה עובדות, ופאנל "בדיקת מערכת" בבית (רק בפיתוח, `src/app/DevStatus.tsx`) מאשר: משתמש, פרופיל, RLS וזמני שבת. הרשמה ציבורית כבויה בעוד ספק האימייל דלוק (`supabase/config.toml`). בדרך תוקנו: `suppressHydrationWarning` על ה-body (תוספי דפדפן מזריקים תכונות), אזור זמן ברירת מחדל `Asia/Jerusalem` ו-`allowedDevOrigins`. (תוצאות ההרצה מהסשן הקודם; הקוד והסקריפטים אומתו בקוד.)
 
 ### נשאר לבנות
 
+- [ ] **שילוב הלוגו (בעבודה):** `logo.png` הוא המקור לאייקוני ה-PWA (192, 512, maskable, apple-touch) ול-favicon; הצבעים ב-`tokens.css` נגזרים ממנו; הלוגו מופיע במסך הכניסה ובכותרת; `logo-banner` ב-A1 Welcome.
 - [ ] **Mobile-first layout** וניווט תחתון: `Home | Progress | Report | Coach | Me`, כש-Report פותח Bottom Sheet. נבנה עם Home.
 - [ ] **ממשק `ActivityDataSource`** (העמודה `source` קיימת; הממשק עצמו עוד לא).
 - [ ] **Behavior Engine:** הפונקציה הטהורה `decide(input, now)` (Context → Eligibility → Cooldown → Gates → אחת / ASK / DO_NOTHING), בדיקות לכללים (תקציב, cooldown לפי התערבות + הקשר, רעב אמיתי לפני אכילה, Offline גובר).
@@ -90,21 +110,23 @@
 
 ### ממתין לפעולות שלך
 
-(חשבונות, מפתחות וסודות. פירוט מלא ב-[SETUP-CHECKLIST.md](SETUP-CHECKLIST.md).)
+(חשבונות, מפתחות, סודות ומחיקות. פירוט מלא ב-[SETUP-CHECKLIST.md](SETUP-CHECKLIST.md). לפי סדר הביצוע.)
 
-- [ ] פרויקט Supabase (Free) והעתקת המפתחות ל-`app/.env.local`
-- [ ] הרצת המיגרציה, יצירת המשתמש שלך מהדשבורד, וכיבוי הרשמה ציבורית
-- [ ] `CRON_SECRET` ומפתחות VAPID
-- [ ] repo ב-GitHub על החשבון האישי (Vercel Hobby לא מתחבר ל-repos של ארגון)
-- [ ] Vercel: ייבוא ה-repo עם Root Directory = `app` והזנת משתני הסביבה
-- [ ] `pg_cron` שקורא ל-`/api/engine/tick` (ואימות שהוא זמין ב-Free)
-- [ ] להפעיל Docker Desktop ולהריץ `supabase start` פעם אחת, כבדיקה מול הסביבה האמיתית של Supabase (ה-RLS נבדק ב-PGlite)
+- [ ] פרויקט Supabase **מארח** בתוכנית Free, והעתקת Project URL, Publishable key ו-Secret key ל-`app/.env.local` (סעיף 2 ב-checklist)
+- [ ] הרצת המיגרציה בפרויקט ההוא (SQL Editor), יצירת המשתמש שלך מהדשבורד, וכיבוי הרשמה ציבורית **בלי** לכבות את ספק ה-Email
+- [ ] הפעלת `pg_cron` ו-`pg_net` (Database → Extensions) ואימות שהם זמינים ב-Free (אם לא: Cloudflare Workers cron)
+- [ ] `CRON_SECRET` ומפתחות VAPID לפרודקשן (סעיף 3 ב-checklist). אותם ערכים נכנסים גם ל-Vercel
+- [x] repo ב-GitHub: `imberezin/MyPersonalCoach`, חשבון אישי (Vercel Hobby לא מתחבר ל-repos של ארגון). ה-repo **ציבורי**, והמסמכים כוללים את השם ויעד המשקל כדוגמאות מסך: החלטה מודעת מ-2026-10-01. ה-commit הראשון (`bca839f`) עלה ל-`main`.
+- [ ] Vercel: ייבוא ה-repo עם Root Directory = `app` והזנת משתני הסביבה (כולל `SUPABASE_SECRET_KEY`, `CRON_SECRET` ומפתחות ה-VAPID)
+- [ ] תזמון `pg_cron` + `pg_net` שקורא ל-`POST /api/engine/tick` עם `Authorization: Bearer <CRON_SECRET>`, אחרי שהאתר באוויר (סעיף 6 ב-checklist)
+- [x] בדיקה מול הסביבה האמיתית של Supabase בתוך Docker (נעשה: המיגרציה והתנהגות ה-RLS מאומתות גם שם)
+- [ ] **(חדש)** לפני שמוסיפים משתמש שני: לחזור לכלל הבטיחות (תגובה רכה והפניה לאיש מקצוע בעת מצוקה חמורה סביב אוכל). ב-Phase 1 אין כלל כזה, כי המוצר אישי; ראה [INTERVENTIONS.md](INTERVENTIONS.md), שורת "כלל בטיחות", וסעיף 0 למעלה
 
 ---
 
 ## 2. P0 — Core Loop
 
-### 2.1 Onboarding (A1–A12)
+### 2.1 Onboarding (A1–A12) — בעבודה עכשיו
 - [ ] A1 Welcome
 - [ ] A2 Goal (בחירה מרובה, "עדיין לא בטוח" תקף)
 - [ ] A3 Weight (נקודת פתיחה, בלי שיפוטיות)
@@ -133,7 +155,7 @@
 
 ### 2.3 First Week (B1–B6, §6)
 - [ ] מצב פנימי (המשתמש לא רואה "יום 9 מתוך 15")
-- [ ] כללי מעבר: יום זמין = פחות מ-50% ממנו Offline. סיום מוקדם = לפחות 5 ימים זמינים ולפחות 10 ארוחות מאושרות. מקסימום 15 ימים זמינים; אחרי 15 בלי מספיק מידע עוברים בלי שפת כישלון
+- [ ] כללי מעבר: יום זמין = פחות מ-50% ממנו Offline. סיום מוקדם = לפחות 5 ימים זמינים ולפחות 10 ארוחות מאושרות. מקסימום 15 ימים זמינים; אחרי 15 בלי מספיק מידע עוברים בלי שפת כישלון. (הלוגיקה והבדיקות כבר ב-`src/domain/firstWeek.ts` ו-`offline.ts`; נשאר לחבר ל-DB ול-UI)
 - [ ] B1 Start (בלי score / אחוזים / ימים שהוחמצו)
 - [ ] B2/B3 משוב מיידי אחרי פעולה משמעותית ("קיבלתי. כבר התחלתי להבין קצת איך אתה אוכל.")
 - [ ] B4 Early Signal (נשמע לי נכון / לא בטוח / לא קשור) — לא מקדמים ל-Pattern רק בגלל אישור משתמש
@@ -164,7 +186,7 @@
 - [ ] F3 ספריית התערבויות מבוקרת (11 סוגים, ראה [INTERVENTIONS.md](INTERVENTIONS.md)) — בחירת **אחת** בלבד, או DO NOTHING
 - [ ] F4 Intervention Outcome (נתון למידה) — שאלה ראשית "איך זה עזר?" (`helpfulness`), ושאלה שנייה "אכלת בסוף?" (`continued_eating`) רק כשההתערבות הייתה סביב אכילה. המסך כבר מעודכן במסמך המסכים.
 - [ ] F5 Pattern Candidate אחרי evidence חוזר
-- [ ] מחזור חיי Pattern: Observation → Repeated Evidence → Candidate → User Confirmation / Strong Evidence → Validated
+- [ ] מחזור חיי Pattern: Observation → Repeated Evidence → Candidate → User Confirmation / Strong Evidence → Validated. (הסיווג והבדיקות כבר ב-`src/domain/patternLifecycle.ts`; נשאר לחבר ל-`patterns` / `pattern_evidence` ול-UI)
 
 ### 3.2 Bad Day / Recovery (G1–G4, §23)
 - [ ] G1 "היום היה קצת קשה. רוצה לדבר על זה?"
@@ -177,14 +199,14 @@
 ### 3.3 Progress (I1–I6)
 - [ ] I1 Overview: איפה אני → מה השתנה → מה למדנו → מה הצעד הבא
 - [ ] I2 Weight Trend שבועי (7/30/90 יום), טרנד ולא תנודות יומיות
-- [ ] I3 Milestones (אבני דרך מוטיבציוניות, לא עובר/נכשל). מחושבים: כל 5 ק"ג ממשקל ההתחלה לכיוון היעד, האחרון הוא היעד. בלי יעד מספרי אין Milestones של משקל
+- [ ] I3 Milestones (אבני דרך מוטיבציוניות, לא עובר/נכשל). מחושבים: כל 5 ק"ג ממשקל ההתחלה לכיוון היעד, האחרון הוא היעד. בלי יעד מספרי אין Milestones של משקל. (החישוב והבדיקות כבר ב-`src/domain/milestones.ts`; נשאר ה-UI)
 - [ ] I4 Behavior Progress לפי תחום, **בלי ציון מסכם אחד**
 - [ ] I5 Learned Patterns עם evidence/הקשר
 - [ ] I6 Plateau — הצגת שינויים התנהגותיים, בלי המלצה אוטומטית להגבלה
 - [ ] בלי: דגש על שקילה יומית, score, ranking, ציון טוב/רע
 
 ### 3.4 Shabbat / Offline (J1–J9, §21)
-- [ ] `OfflinePeriod` גנרי, מוטמע בכל מקום (First Week, חישובי adherence, streak, התראות)
+- [ ] `OfflinePeriod` גנרי, מוטמע בכל מקום (First Week, חישובי adherence, streak, התראות). (הטבלה, `isOffline()` וחישוב זמני שבת כבר קיימים; נשאר לחבר לכל צרכן)
 - [ ] J1 Shabbat Approaching → J2 בחירת ניסוי קטן (או בלי) → J3 "שבת שלום"
 - [ ] J4 מצב Offline: התראות / תזכורות / התערבויות / דיווח ארוחות כבויים; streak לא נפגע; יעדים יומיים מושהים; adherence מוחרג
 - [ ] J5 Motzei Shabbat Welcome (קל)
@@ -267,6 +289,8 @@
 לכל קבוצה: Flow → Screens → States → User actions → System behavior → Edge cases → ASCII wireframes → Final UX decision.
 
 > שלבים 3–7 הם ה-P0 (על גבי החלטות ותשתית); 8–10 הם P1; 11–12 הם P2.
+>
+> זה סדר העיצוב והאפיון. סדר המימוש נקבע בסעיף 0 (Home לפני Report, ו-B2–B6 אחרי Report).
 
 ---
 
