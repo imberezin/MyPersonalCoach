@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { signOut } from "@/app/actions";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { MEALS_ROUTES } from "@/domain/food";
 import { getTranslations } from "@/i18n/server";
 import { InfoPage } from "../_components/InfoPage";
 import { SetupNotice } from "../_components/SetupNotice";
@@ -24,6 +25,10 @@ export default async function MePage() {
     <div className={styles.stack}>
       <InfoPage title={t("title")}>
         <p>{t("body")}</p>
+        <p>{t("mealsHint")}</p>
+        <ButtonLink href={MEALS_ROUTES.list} variant="secondary">
+          {t("mealsLink")}
+        </ButtonLink>
         <form action={signOut}>
           <Button type="submit" variant="secondary">
             {tCommon("signOut")}

@@ -339,7 +339,48 @@
   },
   "me": {
     "title": "Me",
-    "body": "Settings and personal details will be added here later."
+    "body": "Settings and personal details will be added here later.",
+    "mealsLink": "My meals",
+    "mealsHint": "What you've saved, and a way to delete a meal."
+  },
+  "meals": {
+    "meta": {
+      "title": "My meals"
+    },
+    "title": "My meals",
+    "lead": "Here you can see what you saved, and delete a meal whenever you like.",
+    "back": "Back",
+    "listLabel": "Your saved meals",
+    "row": {
+      "when": "{meal} · {day} at {time}",
+      "more": "{count, plural, one {and # more} other {and # more}}",
+      "noFoods": "No foods listed",
+      "delete": "Delete",
+      "deleteThis": "Delete this meal"
+    },
+    "confirm": {
+      "title": "Delete this meal?",
+      "body": "It will be removed from your account, with everything saved about it. This can't be undone.",
+      "keep": "Keep it",
+      "delete": "Delete the meal",
+      "deleting": "Deleting..."
+    },
+    "notice": {
+      "deleted": "The meal was deleted.",
+      "gone": "That meal was already gone.",
+      "error": "I couldn't confirm the delete right now. You can check the list and try again."
+    },
+    "empty": {
+      "title": "No meals saved yet",
+      "body": "When a meal is saved, it will appear here."
+    },
+    "unavailable": {
+      "title": "I couldn't load your meals",
+      "body": "That's okay. You can try again in a moment.",
+      "retry": "Try again"
+    },
+    "more": "Show more",
+    "capNote": "Showing your most recent meals."
   },
   "notFound": {
     "title": "This page was not found",

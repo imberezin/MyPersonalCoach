@@ -3,6 +3,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MEALS_ROUTES } from "@/domain/food";
+import he from "@/i18n/messages/he.json";
 import type { AppGate } from "../_lib/gate";
 import MePage from "./page";
 
@@ -43,10 +45,25 @@ describe("Me page", () => {
     expect(html).toMatch(/<button\b[^>]*type="submit"/);
   });
 
+  it.each([
+    ["Supabase could not be reached", open({ kind: "unavailable" })],
+    ["nobody is signed in", open({ kind: "signed_out" })],
+    ["there is no profile", open({ kind: "profile_missing" })],
+  ])("links to the saved meals, with a hint, ahead of the sign-out form when %s", async (_name, result) => {
+    gate.result = result;
+    const html = await render();
+    const link = `href="${MEALS_ROUTES.list}"`;
+    expect(html).toContain(link);
+    expect(html).toContain(he.me.mealsLink);
+    expect(html).toContain(he.me.mealsHint);
+    expect(html.indexOf(link)).toBeLessThan(html.indexOf("<form"));
+  });
+
   it("shows only the setup notice, with no sign-out, when Supabase is not configured", async () => {
     gate.result = { kind: "not_configured" } satisfies AppGate;
     const html = await render();
     expect(html).toContain("setup");
     expect(html).not.toContain("<form");
+    expect(html).not.toContain(MEALS_ROUTES.list);
   });
 });

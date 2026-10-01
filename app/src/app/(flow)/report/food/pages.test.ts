@@ -13,7 +13,8 @@ import { PhotoUnavailable } from "@/components/food/PhotoUnavailable";
 import { QuietNotice } from "@/components/food/QuietNotice";
 import { SavedView } from "@/components/food/SavedView";
 import { TextReport } from "@/components/food/TextReport";
-import { FOOD_ROUTES, mealOf, revisionOf, type Understanding } from "@/domain/food";
+import { FOOD_ROUTES, RESUME_WINDOW_MS, mealOf, revisionOf, type Understanding } from "@/domain/food";
+import he from "@/i18n/messages/he.json";
 import ConfirmPage, { generateMetadata as confirmMetadata } from "./[id]/page";
 import EditPage from "./[id]/edit/page";
 import SavedPage from "./[id]/saved/page";
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   findResumable: vi.fn(),
   loadUnderstanding: vi.fn(),
   loadSavedMeal: vi.fn(),
+  deleteMealAction: vi.fn(async () => {}),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -48,6 +50,8 @@ vi.mock("./actions", () => ({
   discardAction: async () => {},
   saveEditAction: async () => null,
 }));
+// The Saved screen hands this action to the delete control; here only that it is the very function matters.
+vi.mock("@/app/(app)/me/meals/actions", () => ({ deleteMealAction: mocks.deleteMealAction }));
 vi.mock("@/lib/ai/factory", () => ({ isAiConfigured: mocks.isAiConfigured }));
 vi.mock("@/lib/food/repo", () => ({
   findResumable: mocks.findResumable,
@@ -93,6 +97,17 @@ function understanding(over: Partial<Understanding> = {}): Understanding {
   };
 }
 
+/** A saved meal as `loadSavedMeal` returns it (the value gains `meal` for the delete control's summary). */
+const savedValue = (over: { entryId?: string; isFirstMeal?: boolean; foods?: string[] } = {}) => {
+  const entryId = over.entryId ?? "entry-1";
+  return {
+    entryId,
+    confirmedAt: NOW,
+    isFirstMeal: over.isFirstMeal ?? true,
+    meal: { id: entryId, occurredAt: new Date("2026-10-01T09:00:00Z"), mealType: "lunch", foods: over.foods ?? ["schnitzel", "rice"] },
+  };
+};
+
 const idProps = (query: Record<string, string | string[] | undefined> = {}, id = ID) =>
   ({ params: Promise.resolve({ id }), searchParams: Promise.resolve(query) }) as never;
 
@@ -110,7 +125,7 @@ beforeEach(() => {
   mocks.isAiConfigured.mockReset().mockReturnValue(true);
   mocks.findResumable.mockReset().mockResolvedValue(null);
   mocks.loadUnderstanding.mockReset().mockResolvedValue({ ok: true, value: understanding() });
-  mocks.loadSavedMeal.mockReset().mockResolvedValue({ ok: true, value: { entryId: "entry-1", confirmedAt: NOW, isFirstMeal: true } });
+  mocks.loadSavedMeal.mockReset().mockResolvedValue({ ok: true, value: savedValue() });
 });
 
 describe("titles", () => {
@@ -207,6 +222,14 @@ describe("D6 /report/food/[id]", () => {
     await expect(outcome(() => ConfirmPage(idProps()))).resolves.toBe("NOT_FOUND");
   });
 
+  it("is a 404 for a pending report older than the resume window, which a delete elsewhere would remove, and shows one just inside it", async () => {
+    const age = (ms: number) => understanding({ createdAt: new Date(NOW.getTime() - ms) });
+    mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: age(RESUME_WINDOW_MS + 60_000) });
+    await expect(outcome(() => ConfirmPage(idProps()))).resolves.toBe("NOT_FOUND");
+    mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: age(RESUME_WINDOW_MS - 60_000) });
+    expect(((await ConfirmPage(idProps())) as ReactElement).type).toBe(ConfirmScreen);
+  });
+
   it("shows the confirm screen for a pending report, with the view built from the stored one", async () => {
     const u = understanding();
     mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: u });
@@ -253,6 +276,14 @@ describe("D7 /report/food/[id]/edit", () => {
   it.each(["accepted", "edited", "rejected"] as const)("sends a report that is %s to the confirm screen", async (status) => {
     mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: understanding({ status }) });
     await expect(outcome(() => EditPage(idProps()))).resolves.toBe(`REDIRECT:${FOOD_ROUTES.confirm(ID)}:replace`);
+  });
+
+  it("is a 404 for a pending report older than the resume window, and opens one just inside it", async () => {
+    const age = (ms: number) => understanding({ createdAt: new Date(NOW.getTime() - ms) });
+    mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: age(RESUME_WINDOW_MS + 60_000) });
+    await expect(outcome(() => EditPage(idProps()))).resolves.toBe("NOT_FOUND");
+    mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: age(RESUME_WINDOW_MS - 60_000) });
+    expect(((await EditPage(idProps())) as ReactElement).type).toBe(EditForm);
   });
 
   it("prefills the form from the draft when there is one, and goes back to the confirm screen on cancel", async () => {
@@ -302,7 +333,7 @@ describe("D8 /report/food/[id]/saved", () => {
 
   it("does not add it when it is not the first meal", async () => {
     saved();
-    mocks.loadSavedMeal.mockResolvedValue({ ok: true, value: { entryId: "entry-2", confirmedAt: NOW, isFirstMeal: false } });
+    mocks.loadSavedMeal.mockResolvedValue({ ok: true, value: savedValue({ entryId: "entry-2", isFirstMeal: false }) });
     expect(((await SavedPage(idProps())) as ReactElement<{ firstReport: boolean }>).props.firstReport).toBe(false);
   });
 
@@ -312,9 +343,40 @@ describe("D8 /report/food/[id]/saved", () => {
     expect(((await SavedPage(idProps())) as ReactElement<{ firstReport: boolean }>).props.firstReport).toBe(false);
   });
 
-  it("shows the unavailable card when the saved meal cannot be read", async () => {
+  it("shows the unavailable card when the saved meal cannot be read, with no delete control made up", async () => {
     saved();
     mocks.loadSavedMeal.mockResolvedValue({ ok: false, code: "unavailable" });
     expect(((await SavedPage(idProps())) as ReactElement).type).toBe(FlowUnavailable);
+  });
+
+  type Deletion = { entryId: string; action: unknown; summary: { id: string; whenText: string; foods: { kind: string; text: string }[]; moreText: string | null; emptyText: string | null } };
+
+  it("offers to delete the meal that was just saved: its id, the shared action and a summary built from the stored meal", async () => {
+    saved();
+    mocks.loadSavedMeal.mockResolvedValue({ ok: true, value: savedValue({ entryId: "entry-9", foods: ["schnitzel", "rice"] }) });
+    const element = (await SavedPage(idProps())) as ReactElement<{ deletion: Deletion }>;
+    const { deletion } = element.props;
+    expect(deletion.entryId).toBe("entry-9");
+    expect(deletion.action).toBe(mocks.deleteMealAction);
+    // 09:00Z on 1 Oct is 12:00 in Israel, the same day as NOW; the zone is the person's own.
+    expect(deletion.summary.id).toBe("meal-entry-9");
+    expect(deletion.summary.whenText).toContain("12:00");
+    expect(deletion.summary.foods.filter((part) => part.kind === "food").map((part) => part.text)).toEqual(["schnitzel", "rice"]);
+    expect(deletion.summary.emptyText).toBeNull();
+  });
+
+  it("builds the summary in the person's zone, not the server's", async () => {
+    saved();
+    mocks.reportGate.mockResolvedValue({ ...readyGate(), timeZone: "UTC" });
+    const element = (await SavedPage(idProps())) as ReactElement<{ deletion: Deletion }>;
+    expect(element.props.deletion.summary.whenText).toContain("09:00");
+  });
+
+  it("says plainly that a meal has no readable foods, and still offers the delete", async () => {
+    saved();
+    mocks.loadSavedMeal.mockResolvedValue({ ok: true, value: savedValue({ foods: [] }) });
+    const element = (await SavedPage(idProps())) as ReactElement<{ deletion: Deletion }>;
+    expect(element.props.deletion.summary.foods).toEqual([]);
+    expect(element.props.deletion.summary.emptyText).toBe(he.meals.row.noFoods);
   });
 });

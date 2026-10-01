@@ -1,5 +1,8 @@
 // D8 and the three calm notices (quiet, unavailable, photo off), as markup with the real catalogs.
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { MealSummaryProps } from "@/components/meals/buildSummary";
+import { DeleteMealControl } from "@/components/meals/DeleteMealControl";
 import { FlowUnavailable } from "./FlowUnavailable";
 import { PhotoUnavailable } from "./PhotoUnavailable";
 import { QuietNotice } from "./QuietNotice";
@@ -24,9 +27,18 @@ vi.mock("@/i18n/server", async () => {
 
 const hrefs = (html: string) => Array.from(html.matchAll(/<a\b[^>]*href="([^"]+)"/g), (match) => match[1]);
 
-async function renderSaved(locale: TestLocale, firstReport: boolean): Promise<string> {
+const summary: MealSummaryProps = {
+  id: "meal-0b6f7e0a-8d9c-4f3e-a1b2-c3d4e5f60718",
+  whenText: "summary when line",
+  foods: [{ kind: "food", text: "summary food" }],
+  moreText: null,
+  emptyText: null,
+};
+const deletion = { entryId: "0b6f7e0a-8d9c-4f3e-a1b2-c3d4e5f60718", summary, action: async () => {} };
+
+async function renderSaved(locale: TestLocale, firstReport: boolean, withDeletion = false): Promise<string> {
   intl.locale = locale;
-  return renderWithIntl(await SavedView({ firstReport, followUp: { kind: "none" } }), locale);
+  return renderWithIntl(await SavedView({ firstReport, followUp: { kind: "none" }, deletion: withDeletion ? deletion : null }), locale);
 }
 
 describe.each(LOCALES)("SavedView (D8) in %s", (locale) => {
@@ -58,6 +70,82 @@ describe.each(LOCALES)("SavedView (D8) in %s", (locale) => {
     expect(html).not.toContain("<button");
     expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(textOf(html)).not.toMatch(/\d|%|!/);
+  });
+});
+
+/** The first element of `type` in a tree that has not been rendered. */
+function findElement(node: ReactNode, type: unknown): ReactElement<Record<string, unknown>> | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findElement(child, type);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!isValidElement<Record<string, unknown>>(node)) return null;
+  return node.type === type ? node : findElement(node.props.children as ReactNode, type);
+}
+
+describe("SavedView (D8) hands the delete control what the open panel needs", () => {
+  it("the meal's id, the Saved origin, the action, and the summary that its own id names", async () => {
+    intl.locale = "he";
+    const tree = await SavedView({ firstReport: false, followUp: { kind: "none" }, deletion });
+    const control = findElement(tree, DeleteMealControl);
+    expect(control).not.toBeNull();
+    expect(control?.props.entryId).toBe(deletion.entryId);
+    expect(control?.props.from).toBe("saved");
+    expect(control?.props.action).toBe(deletion.action);
+    expect(control?.props.summaryId).toBe(summary.id);
+    // The summary is the element the panel repeats: MealSummary for this very meal.
+    const shown = control?.props.summary as ReactElement<{ summary: MealSummaryProps }>;
+    expect(isValidElement(shown)).toBe(true);
+    expect(shown.props.summary).toBe(summary);
+    // The Saved screen has no list size to keep and no outside description.
+    expect(control?.props.pages).toBeUndefined();
+    expect(control?.props.describedBy).toBeUndefined();
+  });
+
+  it("renders no control at all without a meal", async () => {
+    intl.locale = "he";
+    const tree = await SavedView({ firstReport: false, followUp: { kind: "none" }, deletion: null });
+    expect(findElement(tree, DeleteMealControl)).toBeNull();
+  });
+});
+
+describe.each(LOCALES)("SavedView (D8) delete control in %s", (locale) => {
+  const meals = catalogs[locale].meals;
+
+  it("adds nothing when there is no meal to name", async () => {
+    expect(await renderSaved(locale, false, false)).not.toMatch(/<button|<form|role="group"/);
+  });
+
+  it("adds one quiet 'Delete this meal' button, after the Back link", async () => {
+    const html = await renderSaved(locale, false, true);
+    expect(count(html, /<button\b/g)).toBe(1);
+    expect(html).toContain(`>${meals.row.deleteThis}</button>`);
+    expect(html.indexOf('href="/"')).toBeGreaterThan(-1);
+    expect(html.indexOf('href="/"')).toBeLessThan(html.indexOf("<button"));
+    expect(hrefs(html)).toEqual(["/"]);
+  });
+
+  it("keeps the control outside the status block, so the arrival announcement is unchanged", async () => {
+    const withControl = await renderSaved(locale, true, true);
+    const status = /<div role="status"[^>]*>([^]*?)<\/div>/.exec(withControl)?.[1] ?? "";
+    expect(status).not.toContain("<button");
+    const without = await renderSaved(locale, true, false);
+    const plain = /<div role="status"[^>]*>([^]*?)<\/div>/.exec(without)?.[1] ?? "";
+    expect(status).toBe(plain);
+  });
+
+  it("has no meal summary and no question until the button is pressed", async () => {
+    const html = await renderSaved(locale, false, true);
+    expect(html).not.toContain(summary.whenText);
+    expect(html).not.toContain("aria-describedby");
+    expect(html).not.toContain("<form");
+  });
+
+  it("still has exactly one h1", async () => {
+    expect(count(await renderSaved(locale, false, true), /<h1[\s>]/g)).toBe(1);
   });
 });
 

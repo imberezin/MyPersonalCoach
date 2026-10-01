@@ -30,13 +30,13 @@ Environment variables: `.env.example`.
 
 ```text
 src/
-├── app/            routes (thin): login, onboarding, (app) = home / progress / coach / me, (flow) = report/food/*, manifest, /api/engine/tick, /api/food/analyze
+├── app/            routes (thin): login, onboarding, (app) = home / progress / coach / me (+ me/meals), (flow) = report/food/*, manifest, /api/engine/tick, /api/food/analyze
 ├── proxy.ts        refreshes the Supabase session and guards routes (Next 16 name for middleware)
-├── domain/         pure logic, no I/O: offline periods, First Week, milestones, patterns, intervention library, Home state (home/), food reporting (food/)
+├── domain/         pure logic, no I/O: offline periods, First Week, milestones, patterns, intervention library, Home state (home/), food reporting and the meal list (food/)
 ├── lib/
 │   ├── supabase/   browser, server and admin clients, session refresh
 │   ├── ai/         AIGateway (fallback, timeout, schema validation) + provider adapters (Gemini, Groq), quota ledger
-│   ├── food/       food reporting IO: repository (RLS, RPCs), analyze orchestrator, D8 follow-up seam
+│   ├── food/       food reporting IO: repository (RLS, RPCs; meal list and delete), analyze orchestrator, D8 follow-up seam
 │   ├── http/       same-origin check for Route Handlers
 │   ├── analytics/  track() and the allowed event names (no content)
 │   ├── notifications/  Web Push provider

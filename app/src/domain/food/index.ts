@@ -12,3 +12,4 @@ export * from "./analyzeTypes";
 export * from "./routes";
 export * from "./view";
 export * from "./stored";
+export * from "./entries";

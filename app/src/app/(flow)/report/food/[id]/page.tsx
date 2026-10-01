@@ -3,7 +3,7 @@ import { RedirectType, notFound, redirect } from "next/navigation";
 import { SetupNotice } from "@/app/(app)/_components/SetupNotice";
 import { ConfirmScreen } from "@/components/food/ConfirmScreen";
 import { FlowUnavailable } from "@/components/food/FlowUnavailable";
-import { FOOD_QUERY, FOOD_ROUTES, buildConfirmView, isUuid } from "@/domain/food";
+import { FOOD_QUERY, FOOD_ROUTES, buildConfirmView, isStaleReport, isUuid } from "@/domain/food";
 import { getTranslations } from "@/i18n/server";
 import { loadUnderstanding } from "@/lib/food/repo";
 import { confirmMealAction, discardAction } from "../actions";
@@ -34,6 +34,8 @@ export default async function FoodConfirmPage(props: PageProps<"/report/food/[id
   // Saved already: the meal exists, and this screen would only offer to save it again.
   if (understanding.status === "accepted" || understanding.status === "edited") redirect(FOOD_ROUTES.saved(id), RedirectType.replace);
   if (understanding.status !== "pending") notFound();
+  // Older than the resume window: a delete elsewhere removes such a report, so it is not offered any more.
+  if (isStaleReport(understanding.createdAt, gate.now)) notFound();
 
   const refreshed = [query[FOOD_QUERY.refreshed]].flat()[0] === "1";
   const failed = [query[FOOD_QUERY.failed]].flat()[0] === "1";

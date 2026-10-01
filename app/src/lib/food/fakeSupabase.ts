@@ -20,7 +20,10 @@ export type FakeFoodCall =
       columns: string;
       patch?: unknown;
       filters: Array<["eq" | "gt", string, unknown]>;
+      /** The FIRST order() call. */
       order?: { column: string; ascending: boolean };
+      /** Every order() call in order (the first included); only set when order() was called more than once. */
+      orders?: Array<{ column: string; ascending: boolean }>;
       limit?: number;
       single: boolean;
     };
@@ -79,7 +82,12 @@ export function createFakeFoodSupabase(config: {
           return builder;
         },
         order(column: string, options?: { ascending?: boolean }) {
-          call.order = { column, ascending: options?.ascending ?? true };
+          const next = { column, ascending: options?.ascending ?? true };
+          if (call.order === undefined) {
+            call.order = next;
+          } else {
+            call.orders = [...(call.orders ?? [call.order]), next];
+          }
           return builder;
         },
         limit(count: number) {

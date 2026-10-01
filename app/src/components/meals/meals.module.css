@@ -1,0 +1,113 @@
+/* My meals: the list, the quiet Delete and its inline question. Tokens only (tests/design/tokens.test.ts):
+   text colors are limited to the readable text tokens, and the brand colors are used for backgrounds
+   and borders. Logical properties throughout, so one stylesheet serves Hebrew (RTL) and English (LTR).
+   Nothing here is red, coral or animated: deleting your own meal is neither a mistake nor an alarm. */
+
+/* ---- The list ---- */
+
+.list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A subtle bordered card with a very light shadow (Brand sections 14 and 16); the meal on top, its control below. */
+.row {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  color: var(--color-text-primary);
+}
+
+/* ---- One meal in words ---- */
+
+.summary {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.summary p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.when {
+  font-weight: 600;
+}
+
+.foods {
+  color: var(--color-text-primary);
+}
+
+/* ---- The notice after a delete: it takes focus, but it is a message, not a control, so no ring ---- */
+
+.notice:focus,
+.notice:focus-visible {
+  outline: none;
+}
+
+/* ---- The empty and unavailable cards ---- */
+
+.stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.stack p {
+  margin: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-h2);
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: stretch;
+}
+
+/* ---- The inline question: a neutral sand inset in the place of the Delete button ---- */
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--radius-lg);
+  background: var(--color-secondary-light);
+  color: var(--color-text-primary);
+}
+
+/* The heading takes focus when the question opens (for screen readers); it is not a control, so no ring. */
+.panelTitle {
+  margin: 0;
+  font-size: var(--font-size-h3);
+}
+
+.panelTitle:focus,
+.panelTitle:focus-visible {
+  outline: none;
+}
+
+.panelBody {
+  margin: 0;
+}
+
+.panelForm {
+  display: grid;
+}
+
+/* Keep and Delete stacked, full width, with a gap between them, so one thumb slip cannot hit both. */
+.panelActions {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: stretch;
+}

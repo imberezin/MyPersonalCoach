@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { RESUME_WINDOW_MS, draftToJson, itemsToJson } from "@/domain/food";
+import { MEAL_ENTRY_COLUMNS, RESUME_WINDOW_MS, draftToJson, itemsToJson } from "@/domain/food";
 import type { MealDraft, UnderstoodItem } from "@/domain/food";
 import { createFakeFoodSupabase, type FakeFoodCall } from "./fakeSupabase";
 import {
   UNDERSTANDING_COLUMNS,
   confirmMeal,
   createUnderstanding,
+  deleteMealEntry,
   discardUnderstanding,
   findByRequestId,
   findResumable,
+  listMealEntries,
   loadSavedMeal,
   loadUnderstanding,
   saveDraft,
@@ -334,20 +336,43 @@ describe("findResumable", () => {
 });
 
 describe("loadSavedMeal", () => {
-  const entry = { id: ENTRY_ID, confirmed_at: "2027-01-12T10:00:00+00:00" };
+  const entry = {
+    id: ENTRY_ID,
+    confirmed_at: "2027-01-12T10:00:00+00:00",
+    occurred_at: "2027-01-12T09:15:00+00:00",
+    meal_type: "lunch",
+    items: [
+      { name: "tea", portion: null },
+      { name: "bread", portion: { kind: "size", size: "small", estimated: false } },
+    ],
+  };
+  const savedMeal = { id: ENTRY_ID, occurredAt: new Date("2027-01-12T09:15:00Z"), mealType: "lunch", foods: ["tea", "bread"] };
 
-  it("returns the entry of the report and says it is the first meal when it is the only row", async () => {
+  it("returns the entry of the report with its meal and says it is the first meal when it is the only row", async () => {
     const { client, calls } = createFakeFoodSupabase({ tables: { meal_entries: [entry] } });
-    expect(await loadSavedMeal(client, ID)).toEqual({ ok: true, value: { entryId: ENTRY_ID, confirmedAt: new Date("2027-01-12T10:00:00Z"), isFirstMeal: true } });
+    expect(await loadSavedMeal(client, ID)).toEqual({
+      ok: true,
+      value: { entryId: ENTRY_ID, confirmedAt: new Date("2027-01-12T10:00:00Z"), isFirstMeal: true, meal: savedMeal },
+    });
     const asked = queries(calls);
     expect(asked).toHaveLength(2);
-    expect(asked[0]).toMatchObject({ table: "meal_entries", columns: "id, confirmed_at", filters: [["eq", "understanding_id", ID]], single: true });
+    expect(asked[0]).toMatchObject({
+      table: "meal_entries",
+      columns: "id, confirmed_at, occurred_at, meal_type, items",
+      filters: [["eq", "understanding_id", ID]],
+      single: true,
+    });
     expect(asked[1]).toMatchObject({ table: "meal_entries", columns: "id", limit: 2 });
   });
 
   it("is not the first meal when there is more than one entry", async () => {
-    const { client } = createFakeFoodSupabase({ tables: { meal_entries: [entry, { id: "other", confirmed_at: "2027-01-11T10:00:00Z" }] } });
+    const { client } = createFakeFoodSupabase({ tables: { meal_entries: [entry, { ...entry, id: "other" }] } });
     expect(await loadSavedMeal(client, ID)).toMatchObject({ ok: true, value: { isFirstMeal: false } });
+  });
+
+  it("still returns the meal, without foods, when the stored items cannot be read", async () => {
+    const { client } = createFakeFoodSupabase({ tables: { meal_entries: [{ ...entry, items: "junk", meal_type: null }] } });
+    expect(await loadSavedMeal(client, ID)).toMatchObject({ ok: true, value: { meal: { mealType: "other", foods: [] } } });
   });
 
   it("answers not_found when the report has no entry", async () => {
@@ -357,6 +382,136 @@ describe("loadSavedMeal", () => {
   it("answers unavailable for an error, a thrown client and a malformed row", async () => {
     expect(await loadSavedMeal(createFakeFoodSupabase({ tables: { meal_entries: { error: { code: "XX000" } } } }).client, ID)).toEqual({ ok: false, code: "unavailable" });
     expect(await loadSavedMeal(createFakeFoodSupabase({ tables: { meal_entries: "throw" } }).client, ID)).toEqual({ ok: false, code: "unavailable" });
-    expect(await loadSavedMeal(createFakeFoodSupabase({ tables: { meal_entries: [{ id: ENTRY_ID, confirmed_at: "soon" }] } }).client, ID)).toEqual({ ok: false, code: "unavailable" });
+    for (const bad of [{ confirmed_at: "soon" }, { occurred_at: "soon" }, { occurred_at: null }, { id: 5 }]) {
+      expect(await loadSavedMeal(createFakeFoodSupabase({ tables: { meal_entries: [{ ...entry, ...bad }] } }).client, ID), JSON.stringify(bad)).toEqual({
+        ok: false,
+        code: "unavailable",
+      });
+    }
+  });
+});
+
+describe("listMealEntries", () => {
+  const row = (n: number, over: Record<string, unknown> = {}) => ({
+    id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    occurred_at: "2027-01-12T09:15:00+00:00",
+    meal_type: "lunch",
+    items: [{ name: `food ${n}`, portion: null }],
+    ...over,
+  });
+  const rows = (count: number) => Array.from({ length: count }, (_, i) => row(i + 1));
+
+  it("asks for the newest first, with a stable tie-break, and one row more than the pages", async () => {
+    for (const [pages, limit] of [
+      [1, 51],
+      [3, 151],
+      [99, 301],
+    ] as const) {
+      const { client, calls } = createFakeFoodSupabase({ tables: { meal_entries: [] } });
+      await listMealEntries(client, { pages });
+      expect(queries(calls)).toEqual([
+        {
+          kind: "query",
+          table: "meal_entries",
+          op: "select",
+          columns: MEAL_ENTRY_COLUMNS,
+          filters: [],
+          order: { column: "occurred_at", ascending: false },
+          orders: [
+            { column: "occurred_at", ascending: false },
+            { column: "id", ascending: false },
+          ],
+          limit,
+          single: false,
+        },
+      ]);
+    }
+  });
+
+  it("records no `orders` key for a query with a single order() call", async () => {
+    const { client, calls } = createFakeFoodSupabase({ tables: { meal_entries: [] } });
+    await client.from("meal_entries").select("id").order("created_at", { ascending: false });
+    const [call] = queries(calls);
+    expect(call.order).toEqual({ column: "created_at", ascending: false });
+    expect(call).not.toHaveProperty("orders");
+  });
+
+  it("returns an empty list, not an error, for an empty table", async () => {
+    const { client } = createFakeFoodSupabase({ tables: { meal_entries: [] } });
+    expect(await listMealEntries(client, { pages: 1 })).toEqual({ ok: true, value: { entries: [], hasMore: false } });
+  });
+
+  it("returns the parsed meals in the order given", async () => {
+    const { client } = createFakeFoodSupabase({ tables: { meal_entries: rows(3) } });
+    const result = await listMealEntries(client, { pages: 1 });
+    expect(result).toMatchObject({ ok: true, value: { hasMore: false } });
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.value.entries.map((e) => e.foods)).toEqual([["food 1"], ["food 2"], ["food 3"]]);
+    expect(result.value.entries[0]).toEqual({
+      id: "00000000-0000-4000-8000-000000000001",
+      occurredAt: new Date("2027-01-12T09:15:00Z"),
+      mealType: "lunch",
+      foods: ["food 1"],
+    });
+  });
+
+  it("returns at most one page and says there is more when the extra row came back", async () => {
+    const result = await listMealEntries(createFakeFoodSupabase({ tables: { meal_entries: rows(51) } }).client, { pages: 1 });
+    expect(result).toMatchObject({ ok: true, value: { hasMore: true } });
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.value.entries).toHaveLength(50);
+    expect(result.value.entries.at(-1)?.foods).toEqual(["food 50"]);
+  });
+
+  it("says there is no more when exactly one page came back", async () => {
+    const result = await listMealEntries(createFakeFoodSupabase({ tables: { meal_entries: rows(50) } }).client, { pages: 1 });
+    expect(result).toMatchObject({ ok: true, value: { hasMore: false } });
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.value.entries).toHaveLength(50);
+  });
+
+  it("skips a row that cannot be read at all and keeps the rest, and keeps a row whose items are unreadable", async () => {
+    const data = [row(1), row(2, { occurred_at: "soon" }), row(3, { id: null }), null, row(4, { items: { not: "a list" } })];
+    const result = await listMealEntries(createFakeFoodSupabase({ tables: { meal_entries: data } }).client, { pages: 1 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.value.entries.map((e) => e.foods)).toEqual([["food 1"], []]);
+  });
+
+  it("answers unavailable for an error or a thrown client, never an empty list, and logs only the code", async () => {
+    const failed = await listMealEntries(createFakeFoodSupabase({ tables: { meal_entries: { error: { code: "XX000", message: MARKER } } } }).client, { pages: 1 });
+    expect(failed).toEqual({ ok: false, code: "unavailable" });
+    expect(consoleError).toHaveBeenCalledWith("Food: listing the meals failed", "XX000");
+
+    expect(await listMealEntries(createFakeFoodSupabase({ tables: { meal_entries: "throw" } }).client, { pages: 1 })).toEqual({ ok: false, code: "unavailable" });
+    expect(consoleError).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("deleteMealEntry", () => {
+  it("calls the RPC with the entry id and reports a delete", async () => {
+    const { client, calls } = createFakeFoodSupabase({ rpc: { delete_meal_entry: { data: true } } });
+    expect(await deleteMealEntry(client, ENTRY_ID)).toEqual({ ok: true, value: { deleted: true } });
+    expect(calls).toEqual([{ kind: "rpc", name: "delete_meal_entry", args: { p_entry_id: ENTRY_ID } }]);
+  });
+
+  it("reports that there was nothing to delete when the RPC answers false", async () => {
+    const { client } = createFakeFoodSupabase({ rpc: { delete_meal_entry: { data: false } } });
+    expect(await deleteMealEntry(client, ENTRY_ID)).toEqual({ ok: true, value: { deleted: false } });
+  });
+
+  it("answers unavailable for no answer, a non-boolean, an rpc error and a thrown client", async () => {
+    for (const answer of [{ data: null }, { data: "true" }, { data: 1 }, { error: { code: "42883", message: "function does not exist" } }, { error: "throw" as const }]) {
+      const { client } = createFakeFoodSupabase({ rpc: { delete_meal_entry: answer } });
+      expect(await deleteMealEntry(client, ENTRY_ID), JSON.stringify(answer)).toEqual({ ok: false, code: "unavailable" });
+    }
+    expect(consoleError).toHaveBeenCalledWith("Food: deleting the meal failed", "42883");
+  });
+
+  it("logs only the code, never the message or the id", async () => {
+    const { client } = createFakeFoodSupabase({ rpc: { delete_meal_entry: { error: { code: "XX000", message: MARKER } } } });
+    await deleteMealEntry(client, ENTRY_ID);
+    expect(consoleError).toHaveBeenCalledWith("Food: deleting the meal failed", "XX000");
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(ENTRY_ID);
   });
 });

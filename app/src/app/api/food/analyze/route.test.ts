@@ -218,7 +218,7 @@ describe("POST /api/food/analyze: success", () => {
     expect(body).toEqual({ ok: true, id: NEW_ID, redirectTo: `/report/food/${NEW_ID}` });
 
     const [, stored] = mocks.createUnderstanding.mock.calls[0] ?? [];
-    expect(stored).toMatchObject({ requestId: REQUEST_ID, kind: "text", provider: "fake", model: "fake-1", promptVersion: "meal-v1" });
+    expect(stored).toMatchObject({ requestId: REQUEST_ID, kind: "text", provider: "fake", model: "fake-1", promptVersion: "meal-v2" });
     expect(eventNames()).toEqual(["meal_report_started"]);
     expect(events.find((e) => e.row.name === "meal_report_started")?.row.payload).toEqual({ mode: "text", composed_ms: 3200 });
     // One provider attempt, told to the ledger.

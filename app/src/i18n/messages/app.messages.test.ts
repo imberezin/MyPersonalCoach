@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MEALS_MESSAGE_KEYS } from "@/components/meals/messageKeys";
 import { SHELL_MESSAGE_KEYS } from "@/components/shell/messageKeys";
 import { REPORT_OPTIONS } from "@/components/shell/reportOptions";
 import { HOME_COPY_KEYS } from "@/domain/home";
@@ -52,6 +53,7 @@ describe("app message catalogs", () => {
     ["Progress", ["title", "lead", "body"].map((key) => `progress.${key}`)],
     ["Coach", ["title", "heading", "body"].map((key) => `coach.${key}`)],
     ["Me", ["title", "body"].map((key) => `me.${key}`)],
+    ["My meals", [...MEALS_MESSAGE_KEYS]],
     ["not found", ["title", "body", "cta"].map((key) => `notFound.${key}`)],
     ["reused", ["app.shortName", "common.signOut"]],
   ];
@@ -73,7 +75,7 @@ describe("app message catalogs", () => {
   // catalog-wide test in interventions/library.test.ts covers the rest. Keys count too, so the
   // text under test is the whole namespace as JSON.
   describe("copy lint", () => {
-    const NAMESPACES = ["nav", "report", "food", "home", "progress", "coach", "me", "notFound"] as const;
+    const NAMESPACES = ["nav", "report", "food", "home", "progress", "coach", "me", "meals", "notFound"] as const;
     const forbidden = {
       he: ["!", "החמצת", "פספסת", "ציון", "אחוז", "רצף", "חרגת", "נכשל", "מתחילים מחדש", "להתחיל מחדש"],
       en: ["!", "missed", "score", "percent", "streak", "failed", "overdue", "behind", "start over"],

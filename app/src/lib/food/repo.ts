@@ -1,12 +1,17 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  MEAL_ENTRY_COLUMNS,
+  MEAL_LIST,
   RESUME_WINDOW_MS,
+  clampPages,
   draftToJson,
   itemsToJson,
+  parseMealEntryRow,
   parseUnderstandingRow,
   toConfirmedItems,
   type MealDraft,
+  type MealEntrySummary,
   type MealSource,
   type MealType,
   type ReportMode,
@@ -200,16 +205,16 @@ export async function findResumable(supabase: SupabaseClient, now: Date): Promis
 }
 
 /**
- * The confirmed meal of a report, and whether it is the very first meal the user ever saved
- * (`meal_entries` holds exactly one row; the query asks for two and stops).
+ * The confirmed meal of a report (when, kind and food names), and whether it is the very first meal the
+ * user ever saved (`meal_entries` holds exactly one row; the query asks for two and stops).
  */
 export async function loadSavedMeal(
   supabase: SupabaseClient,
   understandingId: string,
-): Promise<RepoResult<{ entryId: string; confirmedAt: Date; isFirstMeal: boolean }>> {
+): Promise<RepoResult<{ entryId: string; confirmedAt: Date; isFirstMeal: boolean; meal: MealEntrySummary }>> {
   try {
     const [entry, anyEntries] = await Promise.all([
-      supabase.from("meal_entries").select("id, confirmed_at").eq("understanding_id", understandingId).maybeSingle(),
+      supabase.from("meal_entries").select("id, confirmed_at, occurred_at, meal_type, items").eq("understanding_id", understandingId).maybeSingle(),
       supabase.from("meal_entries").select("id").limit(2),
     ]);
     if (entry.error || anyEntries.error) {
@@ -220,11 +225,69 @@ export async function loadSavedMeal(
 
     const row = entry.data as { id?: unknown; confirmed_at?: unknown };
     const confirmedAt = typeof row.confirmed_at === "string" ? new Date(row.confirmed_at) : null;
-    if (typeof row.id !== "string" || !confirmedAt || Number.isNaN(confirmedAt.getTime())) return UNAVAILABLE;
+    const meal = parseMealEntryRow(entry.data);
+    if (typeof row.id !== "string" || !confirmedAt || Number.isNaN(confirmedAt.getTime()) || !meal) return UNAVAILABLE;
     const count = Array.isArray(anyEntries.data) ? anyEntries.data.length : 0;
-    return { ok: true, value: { entryId: row.id, confirmedAt, isFirstMeal: count === 1 } };
+    return { ok: true, value: { entryId: row.id, confirmedAt, isFirstMeal: count === 1, meal } };
   } catch {
     console.error("Food: loading the saved meal threw");
+    return UNAVAILABLE;
+  }
+}
+
+/**
+ * The user's confirmed meals, newest first. Loads one row more than the pages asked for to learn whether
+ * there is more, and returns at most `pages * pageSize`. A row that cannot be read at all is skipped; an
+ * empty table is an empty list, and a failure is `unavailable` (never an empty list: that would claim
+ * "no meals" while some exist).
+ */
+export async function listMealEntries(
+  supabase: SupabaseClient,
+  a: { pages: number },
+): Promise<RepoResult<{ entries: MealEntrySummary[]; hasMore: boolean }>> {
+  try {
+    const limit = clampPages(a.pages) * MEAL_LIST.pageSize;
+    const { data, error } = await supabase
+      .from("meal_entries")
+      .select(MEAL_ENTRY_COLUMNS)
+      .order("occurred_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit + 1);
+    if (error) {
+      console.error("Food: listing the meals failed", error.code ?? "no_code");
+      return UNAVAILABLE;
+    }
+    const rows: unknown[] = Array.isArray(data) ? data : [];
+    const entries: MealEntrySummary[] = [];
+    for (const row of rows.slice(0, limit)) {
+      const entry = parseMealEntryRow(row);
+      if (entry) entries.push(entry);
+    }
+    return { ok: true, value: { entries, hasMore: rows.length > limit } };
+  } catch {
+    console.error("Food: listing the meals threw");
+    return UNAVAILABLE;
+  }
+}
+
+/**
+ * Erases one confirmed meal and everything made from it, in one atomic RPC. `deleted: false` means there
+ * was nothing to delete: already gone, or not the caller's (the two are indistinguishable on purpose).
+ */
+export async function deleteMealEntry(supabase: SupabaseClient, entryId: string): Promise<RepoResult<{ deleted: boolean }>> {
+  try {
+    const { data, error } = await supabase.rpc("delete_meal_entry", { p_entry_id: entryId });
+    if (error) {
+      console.error("Food: deleting the meal failed", error.code ?? "no_code");
+      return UNAVAILABLE;
+    }
+    if (typeof data !== "boolean") {
+      console.error("Food: deleting the meal gave an unexpected answer");
+      return UNAVAILABLE;
+    }
+    return { ok: true, value: { deleted: data } };
+  } catch {
+    console.error("Food: deleting the meal threw");
     return UNAVAILABLE;
   }
 }
