@@ -1,0 +1,140 @@
+/* The Report bottom sheet: a native modal <dialog> anchored to the bottom edge. Tokens only, logical
+   properties only (tests/design/tokens.test.ts and shell.css.test.ts). The scrim is a mix of an
+   existing token, so no new color is introduced. */
+
+/* The browser gives a dialog a border and padding, and hides it with `display: none` while it is
+   closed. So both are reset here, and no `display` rule sits on `.sheet` itself. */
+.sheet {
+  border: 0;
+  padding: 0;
+  margin-block: auto 0;
+  margin-inline: auto;
+  inline-size: min(100%, var(--content-max));
+  max-inline-size: 100%;
+  max-block-size: calc(100dvh - var(--space-7));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: var(--z-sheet);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-start-start-radius: var(--radius-xl);
+  border-start-end-radius: var(--radius-xl);
+  box-shadow: var(--shadow-1);
+}
+
+.sheet::backdrop {
+  background: color-mix(in srgb, var(--color-text-primary) 40%, transparent);
+}
+
+.sheet[open] {
+  animation: sheetIn 240ms ease-out;
+}
+
+.sheet[open]::backdrop {
+  animation: backdropIn 200ms ease-out;
+}
+
+@keyframes sheetIn {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@keyframes backdropIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* The global reduced-motion rule does not match ::backdrop, so it is named here. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet[open],
+  .sheet[open]::backdrop {
+    animation: none;
+  }
+}
+
+/* One full-size child, so a click that lands on the dialog itself can only be a click on the backdrop. */
+.panel {
+  display: grid;
+  gap: var(--space-4);
+  padding-block: var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+  padding-inline: var(--space-5);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-h2);
+}
+
+/* The title takes focus when the sheet opens (for screen readers); it is not a control, so no ring. */
+.title:focus,
+.title:focus-visible {
+  outline: none;
+}
+
+.note,
+.orSimply {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.option,
+.optionLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--tap-target);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-body);
+}
+
+/* A row whose flow does not exist yet: dashed edge, cream fill, quiet text. Not color alone, the
+   note above the list says why. It is not a control and cannot be focused. */
+.option {
+  border: 1px dashed var(--color-border);
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+}
+
+.optionLink {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.emoji {
+  flex: none;
+  font-size: var(--font-size-h3);
+  line-height: 1;
+}
+
+.actions {
+  display: grid;
+  justify-items: center;
+}
+
+@media (hover: hover) {
+  .optionLink:hover {
+    background: var(--color-primary-light);
+  }
+}

@@ -93,6 +93,12 @@
   --tap-target: 2.75rem;
   --content-max: 40rem;
 
+  /* layout geometry: the bottom bar and the Report sheet. Geometry, not visual design, so not in the Brand document. */
+  --nav-height: 4rem; /* the bar, without the safe area */
+  --nav-lift: 1.25rem; /* how far the Report button rises above the bar */
+  --z-nav: 10;
+  --z-sheet: 20;
+
   /* shadows (section 14): a subtle border plus a very light shadow */
   --shadow-1: 0 1px 2px rgb(38 51 44 / 0.05), 0 2px 8px rgb(38 51 44 / 0.04);
 }

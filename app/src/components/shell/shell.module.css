@@ -1,0 +1,206 @@
+/* The app shell: header, content column and bottom bar of the (app) pages. Tokens only
+   (tests/design/tokens.test.ts): text colors are limited to the readable text tokens, and the brand
+   colors are used for backgrounds and borders. Logical properties throughout, so one stylesheet serves
+   Hebrew (RTL) and English (LTR). The only physical properties are the side safe-area paddings of the
+   fixed bar, because the env() insets are named by physical side (shell.css.test.ts allows exactly those). */
+
+/* Supabase is not configured: no chrome, just the setup notice in the middle. */
+.bare {
+  min-block-size: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding-inline: var(--space-4);
+}
+
+.frame {
+  min-block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Header ---- */
+
+.header {
+  padding-block: calc(var(--space-3) + env(safe-area-inset-top, 0px)) var(--space-3);
+}
+
+/* The same column and side padding as .content, so the emblem lines up with the cards on a wide screen. */
+.headerInner {
+  inline-size: min(100%, var(--content-max));
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brandName {
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+}
+
+/* ---- Content: a centered column that never ends under the bar ---- */
+
+.content {
+  flex: 1;
+  inline-size: min(100%, var(--content-max));
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+  padding-block-start: var(--space-4);
+  /* Room for the bar, the raised Report button and the home indicator, plus a little air. */
+  padding-block-end: calc(var(--nav-height) + var(--nav-lift) + env(safe-area-inset-bottom, 0px) + var(--space-5));
+}
+
+/* ---- Bottom bar ---- */
+
+/* A subtle border separates the bar from the page (Brand document section 14); no shadow, since
+   there is nothing below it to cast onto. */
+.nav {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: var(--z-nav);
+  background: var(--color-surface);
+  border-block-start: 1px solid var(--color-border);
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Five equal columns in reading order: in Hebrew the row starts at the right, in English at the left. */
+.list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  inline-size: min(100%, var(--content-max));
+  block-size: var(--nav-height);
+  margin: 0;
+  margin-inline: auto;
+  padding: 0;
+  list-style: none;
+}
+
+.list > li {
+  display: flex;
+}
+
+/* The whole column is the touch target (4rem tall, above the 2.75rem minimum). A label only ever sits
+   on the surface: the soft green is painted behind the icon, never behind text, because the
+   secondary text color is below AA on it. */
+.item {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: var(--nav-height);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  padding-block: var(--space-2) 0;
+  padding-inline: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+  line-height: var(--line-height-tight);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* The ring would be clipped at the screen edge if it sat outside the item. */
+.item:focus-visible {
+  outline-offset: -4px;
+}
+
+.iconWrap {
+  display: grid;
+  place-items: center;
+  inline-size: 3.25rem;
+  block-size: 2rem;
+  border-radius: var(--radius-pill);
+}
+
+.label {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* The current page: darker color, bolder label and a soft pill behind the icon (plus aria-current),
+   so it never relies on color alone. */
+.itemActive {
+  color: var(--color-primary-dark);
+  font-weight: 700;
+}
+
+.itemActive .iconWrap {
+  background: var(--color-primary-light);
+}
+
+/* ---- Report: the one action, raised out of the bar ---- */
+
+.report {
+  padding-block: 0;
+}
+
+.reportDisc {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 3.5rem;
+  block-size: 3.5rem;
+  margin-block: calc(var(--nav-lift) * -1) var(--space-1);
+  border: 4px solid var(--color-surface);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-1);
+  transition:
+    transform 120ms ease-out,
+    background-color 150ms ease-out;
+}
+
+/* The label stays outside the disc in the dark text color: white on Primary Green is large-text only. */
+.reportLabel {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.report[aria-expanded="true"] .reportDisc {
+  background: var(--color-primary-dark);
+}
+
+.report:active .reportDisc {
+  transform: scale(0.97);
+}
+
+/* The disc rises above the item, so the focus ring goes around the disc, not across it. */
+.report:focus-visible {
+  outline: none;
+}
+
+.report:focus-visible .reportDisc {
+  outline: 3px solid var(--color-primary-dark);
+  outline-offset: 2px;
+}
+
+/* Hover only where there is a real pointer: on a phone it would stick after a tap. Only the icon
+   shape changes, never a label's background. */
+@media (hover: hover) {
+  .item:hover .iconWrap {
+    background: var(--color-primary-light);
+  }
+
+  .report:hover .reportDisc {
+    background: var(--color-primary-dark);
+  }
+}
+
+/* Forced colors drop backgrounds, so the pill and the disc keep an outline. */
+@media (forced-colors: active) {
+  .itemActive .iconWrap,
+  .reportDisc {
+    outline: 2px solid currentcolor;
+  }
+}

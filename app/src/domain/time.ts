@@ -66,3 +66,13 @@ export function localDayOf(instant: Date, timeZone: string): LocalDay {
     end: zonedMidnightUtc(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), timeZone),
   };
 }
+
+/**
+ * Wall-clock minutes since local midnight (0..1439) of an instant in a time zone. Midnight is 0,
+ * never 24 (hourCycle h23). On a DST day the repeated hour gives the same value twice and the
+ * skipped hour gives none, because this reads the clock on the wall, not the time elapsed.
+ */
+export function localMinuteOfDay(instant: Date, timeZone: string): number {
+  const { hh, mm } = zonedParts(instant, timeZone);
+  return hh * 60 + mm;
+}

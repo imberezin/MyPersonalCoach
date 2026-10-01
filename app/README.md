@@ -30,9 +30,9 @@ Environment variables: `.env.example`.
 
 ```text
 src/
-├── app/            routes (thin): login, home, manifest, /api/engine/tick
+├── app/            routes (thin): login, onboarding, (app) = home / progress / coach / me, manifest, /api/engine/tick
 ├── proxy.ts        refreshes the Supabase session and guards routes (Next 16 name for middleware)
-├── domain/         pure logic, no I/O: offline periods, First Week, milestones, patterns, intervention library
+├── domain/         pure logic, no I/O: offline periods, First Week, milestones, patterns, intervention library, Home state (home/)
 ├── lib/
 │   ├── supabase/   browser, server and admin clients, session refresh
 │   ├── ai/         AIGateway (fallback, timeout, schema validation) + provider adapters

@@ -1,10 +1,11 @@
+import { replayOnboardingForDev } from "@/app/actions";
+import { Button } from "@/components/ui/Button";
 import { isOffline } from "@/domain/offline";
 import { getLocale, getTranslations } from "@/i18n/server";
 import { computeNextShabbat, defaultCandleLightingMinutes } from "@/lib/shabbat";
 import { isLocalSupabase } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
-import { replayOnboardingForDev } from "./actions";
-import styles from "./home.module.css";
+import styles from "./dev.module.css";
 
 // Jerusalem is used only until the user chooses a city during onboarding.
 const JERUSALEM = { latitude: 31.7683, longitude: 35.2137, cityName: "Jerusalem" } as const;
@@ -73,9 +74,9 @@ export async function DevStatus() {
 
       {isLocalSupabase() ? (
         <form action={replayOnboardingForDev} className={styles.devAction}>
-          <button type="submit" className={styles.secondary}>
+          <Button type="submit" variant="secondary">
             {t("replayOnboarding")}
-          </button>
+          </Button>
           <p className={styles.devHint}>{t("replayOnboardingHint")}</p>
         </form>
       ) : null}

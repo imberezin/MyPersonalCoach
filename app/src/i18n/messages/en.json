@@ -28,9 +28,90 @@
       "unavailable": "Signing in is not possible right now. Please try again in a moment."
     }
   },
+  "nav": {
+    "ariaLabel": "Main navigation",
+    "home": "Home",
+    "progress": "Progress",
+    "report": "Report",
+    "coach": "Coach",
+    "me": "Me"
+  },
+  "report": {
+    "sheet": {
+      "title": "What would you like to report?",
+      "close": "Close",
+      "note": "The reporting options are still being prepared. Until then there is nothing you need to do.",
+      "orSimply": "Or simply:",
+      "options": {
+        "food": "Food",
+        "activity": "Activity",
+        "weight": "Weight",
+        "sleep": "Sleep",
+        "feeling": "How I'm feeling",
+        "photo": "Photo",
+        "text": "Writing"
+      }
+    }
+  },
   "home": {
-    "greeting": "Welcome",
-    "placeholder": "What matters most right now will show up here."
+    "morning": {
+      "title": "Good morning",
+      "body": "You can start the day gently."
+    },
+    "evening": {
+      "title": "Good evening",
+      "body": "There is no need to sum up the day. If there is something you want to share, I'm here."
+    },
+    "beforeShabbat": {
+      "title": "Shabbat is coming",
+      "body": "Candle lighting is at {time}. There is not much to do right now."
+    },
+    "motzeiShabbat": {
+      "title": "Have a good week",
+      "body": "Shabbat has ended. You can continue at your own pace."
+    },
+    "firstWeekStart": {
+      "title": "Our first week",
+      "lead": "This week does not need to prove anything.",
+      "body": "I just want to get to know you: how you eat, when it is hard, what helps, and what a regular day looks like.",
+      "cta": "Let's start"
+    },
+    "silence": {
+      "title": "All is well",
+      "body": "There is nothing I think is worth adding right now."
+    },
+    "offlineShabbat": {
+      "title": "Shabbat shalom",
+      "body": "The app is quiet now. There is no need to report, no reminders and no tracking. See you after Shabbat."
+    },
+    "offlineOther": {
+      "title": "The app is quiet now",
+      "body": "There is no need to report. See you when this time ends."
+    },
+    "firstReport": {
+      "lead": "When it suits you, tell me about one small thing. That is enough for a start.",
+      "cta": "To the first report"
+    },
+    "degraded": "Some information did not load just now, and that is fine. Tap \"Home\" to try again."
+  },
+  "progress": {
+    "title": "Progress",
+    "lead": "What changes for you over time will appear here.",
+    "body": "There is not enough information to show anything yet, and that is fine. After a few reports we will start to see together what changes."
+  },
+  "coach": {
+    "title": "Coach",
+    "heading": "Let's understand together",
+    "body": "Conversations with the coach are not open yet. When they are, you will be able to choose a topic or simply write what is on your mind."
+  },
+  "me": {
+    "title": "Me",
+    "body": "Settings and personal details will be added here later."
+  },
+  "notFound": {
+    "title": "This page was not found",
+    "body": "You can go back to Home and continue from there.",
+    "cta": "Back to Home"
   },
   "dev": {
     "title": "System check (development only)",

@@ -20,7 +20,8 @@ export async function generateMetadata(): Promise<Metadata> {
   // Development only: tells two browser tabs apart when the local and the hosted dev servers run side by side.
   const devMarker = process.env.NODE_ENV === "development" ? (isLocalSupabase() ? "[local] " : "[hosted] ") : "";
   return {
-    title: devMarker + t("name"),
+    // The dev marker stays on every tab: pages set a short title and the template adds the app name.
+    title: { default: devMarker + t("name"), template: `${devMarker}%s · ${t("name")}` },
     description: t("tagline"),
     appleWebApp: { capable: true, title: t("shortName"), statusBarStyle: "default" },
     icons: {
