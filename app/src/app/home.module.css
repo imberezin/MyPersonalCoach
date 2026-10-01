@@ -1,7 +1,9 @@
 .main {
   min-height: 100dvh;
   display: grid;
-  place-items: center;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-4);
   padding: var(--space-5) var(--space-4);
 }
 
@@ -33,4 +35,35 @@
   background: transparent;
   color: var(--color-text);
   cursor: pointer;
+}
+
+/* Development-only status panel (see DevStatus.tsx). */
+.dev {
+  inline-size: min(100%, var(--content-max));
+  background: var(--color-accent-soft);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--font-size-sm);
+}
+
+.dev h2 {
+  font-size: var(--font-size-md);
+  margin-block-end: var(--space-3);
+}
+
+.dev dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.dev dt {
+  color: var(--color-muted);
+}
+
+.dev dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }

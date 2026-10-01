@@ -3,6 +3,9 @@ export type Locale = (typeof locales)[number];
 
 export const defaultLocale: Locale = "he";
 
+/** Until the profile's own time zone is passed in, dates are formatted for Israel. */
+export const DEFAULT_TIME_ZONE = "Asia/Jerusalem";
+
 /** Name of the cookie that mirrors `profiles.language` for fast access. */
 export const LOCALE_COOKIE = "locale";
 

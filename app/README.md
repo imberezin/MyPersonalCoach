@@ -12,7 +12,10 @@ Next.js 16 (App Router) · TypeScript · CSS Modules + design tokens · Supabase
 
 ```bash
 npm run dev         # http://localhost:3000
-npm run check       # lint + typecheck + tests (what CI runs, minus the build)
+npm run local:start # local Supabase in Docker (Docker Desktop must be running)
+npm run local:setup # writes .env.local from the local stack and creates a local dev user
+npm run local:stop  # stop it (data is kept); local:reset wipes the data and reapplies the migrations
+npm run check       # lint + typecheck (runs `next typegen` first) + tests
 npm test            # unit tests and the RLS tests (a real Postgres via PGlite, no Docker)
 npm run build
 npm run icons       # regenerate the placeholder PWA icons

@@ -36,7 +36,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   return (
     <html lang={locale} dir={localeDirection[locale]} className={rubik.variable}>
-      <body>
+      {/* Browser extensions (for example Grammarly) add attributes to <body> before React
+          hydrates. suppressHydrationWarning silences only that one-level attribute mismatch. */}
+      <body suppressHydrationWarning>
         <IntlClientProvider locale={locale} messages={messages}>
           {children}
         </IntlClientProvider>

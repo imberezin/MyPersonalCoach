@@ -1,6 +1,7 @@
 import { getTranslations } from "@/i18n/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { signOut } from "./actions";
+import { DevStatus } from "./DevStatus";
 import styles from "./home.module.css";
 
 export default async function HomePage() {
@@ -31,6 +32,7 @@ export default async function HomePage() {
           </button>
         </form>
       </section>
+      <DevStatus />
     </main>
   );
 }
