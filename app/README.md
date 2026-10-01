@@ -30,18 +30,21 @@ Environment variables: `.env.example`.
 
 ```text
 src/
-├── app/            routes (thin): login, onboarding, (app) = home / progress / coach / me, manifest, /api/engine/tick
+├── app/            routes (thin): login, onboarding, (app) = home / progress / coach / me, (flow) = report/food/*, manifest, /api/engine/tick, /api/food/analyze
 ├── proxy.ts        refreshes the Supabase session and guards routes (Next 16 name for middleware)
-├── domain/         pure logic, no I/O: offline periods, First Week, milestones, patterns, intervention library, Home state (home/)
+├── domain/         pure logic, no I/O: offline periods, First Week, milestones, patterns, intervention library, Home state (home/), food reporting (food/)
 ├── lib/
 │   ├── supabase/   browser, server and admin clients, session refresh
-│   ├── ai/         AIGateway (fallback, timeout, schema validation) + provider adapters
+│   ├── ai/         AIGateway (fallback, timeout, schema validation) + provider adapters (Gemini, Groq), quota ledger
+│   ├── food/       food reporting IO: repository (RLS, RPCs), analyze orchestrator, D8 follow-up seam
+│   ├── http/       same-origin check for Route Handlers
 │   ├── analytics/  track() and the allowed event names (no content)
 │   ├── notifications/  Web Push provider
 │   ├── shabbat/    @hebcal/core, SERVER ONLY (GPL-2.0)
 │   └── cron/       shared-secret check for the cron endpoint
 ├── i18n/           he.json, en.json, server and client helpers
 └── styles/         design tokens
+bake-off/              data for the Hebrew AI bake-off (photos and results are gitignored)
 supabase/migrations/   the schema, with RLS on every table
 tests/db/              RLS tests on real Postgres
 ```

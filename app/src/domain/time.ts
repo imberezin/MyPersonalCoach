@@ -76,3 +76,31 @@ export function localMinuteOfDay(instant: Date, timeZone: string): number {
   const { hh, mm } = zonedParts(instant, timeZone);
   return hh * 60 + mm;
 }
+
+/**
+ * The UTC instant of a wall-clock time on a local calendar day. A time skipped by a DST jump
+ * (02:30 on the spring-forward day) resolves to the first valid instant after the gap, and a
+ * repeated time (01:30 on the fall-back day) to its first occurrence. Never throws for a valid zone.
+ */
+export function zonedInstantUtc(year: number, month: number, day: number, hour: number, minute: number, timeZone: string): Date {
+  const wallClockAsUtc = Date.UTC(year, month - 1, day, hour, minute);
+  // The offsets a day before and a day after the wall time bracket any one transition.
+  const before = tzOffsetMs(new Date(wallClockAsUtc - DAY_MS), timeZone);
+  const after = tzOffsetMs(new Date(wallClockAsUtc + DAY_MS), timeZone);
+
+  // An offset is right for the wall time when the instant it gives really has that offset.
+  const valid = [...new Set([before, after])]
+    .map((offset) => wallClockAsUtc - offset)
+    .filter((instant) => wallClockAsUtc - instant === tzOffsetMs(new Date(instant), timeZone));
+  if (valid.length > 0) return new Date(Math.min(...valid));
+
+  // The wall time falls in a gap: find the instant the clock jumped, the first one with the new offset.
+  let lo = wallClockAsUtc - Math.max(before, after);
+  let hi = wallClockAsUtc - Math.min(before, after);
+  while (hi - lo > 1) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (tzOffsetMs(new Date(mid), timeZone) === after) hi = mid;
+    else lo = mid;
+  }
+  return new Date(hi);
+}

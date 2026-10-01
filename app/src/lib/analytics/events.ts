@@ -6,6 +6,8 @@ export const ANALYTICS_EVENTS = [
   "meal_report_started",
   "meal_saved",
   "meal_corrected",
+  "meal_report_discarded",
+  "meal_ai_fallback",
   "activity_reported",
   "weight_reported",
   "difficult_moment_started",

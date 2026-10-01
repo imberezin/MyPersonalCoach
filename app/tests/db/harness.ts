@@ -24,6 +24,9 @@ const SUPABASE_SHIM = `
   grant usage on schema auth to anon, authenticated, service_role;
   grant execute on function auth.uid() to anon, authenticated, service_role;
   grant select on auth.users to service_role;
+  -- Supabase's real default: every new function in public is executable by anon, authenticated and service_role.
+  -- Without it the tests cannot tell whether a migration's "revoke ... from public, anon" is really there.
+  alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `;
 
 /** A fresh database with every migration applied (sorted by name) and both test users signed up. */

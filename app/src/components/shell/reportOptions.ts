@@ -1,3 +1,5 @@
+import { FOOD_ROUTES } from "@/domain/food/routes";
+
 // The rows of the Report sheet, as data. Swapping a row for a real flow is a one-field change:
 // set `href` to the route (for example "/report/food"), and nothing else in the sheet changes.
 
@@ -15,11 +17,11 @@ export interface ReportOption {
 
 // No voice entry on purpose: it comes later, and showing it would promise it.
 export const REPORT_OPTIONS: readonly ReportOption[] = [
-  { id: "food", group: "category", emoji: "🍽️", href: null },
+  { id: "food", group: "category", emoji: "🍽️", href: FOOD_ROUTES.chooser },
   { id: "activity", group: "category", emoji: "🚶", href: null },
   { id: "weight", group: "category", emoji: "⚖️", href: null },
   { id: "sleep", group: "category", emoji: "😴", href: null },
   { id: "feeling", group: "category", emoji: "🧠", href: null },
-  { id: "photo", group: "input", emoji: "📷", href: null },
-  { id: "text", group: "input", emoji: "✍️", href: null },
+  { id: "photo", group: "input", emoji: "📷", href: FOOD_ROUTES.photo },
+  { id: "text", group: "input", emoji: "✍️", href: FOOD_ROUTES.text },
 ];

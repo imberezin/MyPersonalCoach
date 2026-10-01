@@ -1,0 +1,10 @@
+# Copy this file to bake-off/photos/labels.txt and write one line per photo.
+# Format:  file-name.jpg: food one, food two|other word for it, food three   # optional note
+#   - a comma separates foods
+#   - | separates words that are both fine for the same food
+#   - do not write portions
+#   - a photo that is NOT food: write only the file name and the colon
+# The three lines below are made-up examples.
+01-breakfast.jpg: חביתה|ביצה, לחם, סלט ירקות
+02-salad.jpg: סלט ירקות|סלט
+03-notfood.jpg:

@@ -40,7 +40,7 @@
     "sheet": {
       "title": "What would you like to report?",
       "close": "Close",
-      "note": "The reporting options are still being prepared. Until then there is nothing you need to do.",
+      "note": "The other options are still being prepared.",
       "orSimply": "Or simply:",
       "options": {
         "food": "Food",
@@ -51,6 +51,239 @@
         "photo": "Photo",
         "text": "Writing"
       }
+    }
+  },
+  "food": {
+    "meta": {
+      "title": "Report food"
+    },
+    "common": {
+      "back": "Back"
+    },
+    "chooser": {
+      "title": "How would you like to tell me?",
+      "lead": "You can take a photo or write it. I'll organize it.",
+      "photo": "Photo",
+      "photoHint": "Take a picture of what you ate",
+      "text": "Writing",
+      "textHint": "Write it in your own words",
+      "photoOff": "Photo analysis is not active yet. You can write instead."
+    },
+    "resume": {
+      "title": "There is a report you didn't finish",
+      "body": "You can pick up where you stopped, or let it go.",
+      "continue": "Continue",
+      "discard": "Let it go"
+    },
+    "photo": {
+      "title": "Take a photo of what you ate",
+      "take": "Take a photo",
+      "choose": "Choose from your library",
+      "hint": "If you can, keep people's faces out of the photo.",
+      "cameraHelp": "If the camera does not open, you can choose a photo from your library or write instead.",
+      "noteLabel": "Anything to add? (optional)",
+      "notePlaceholder": "For example: half the portion, no sauce",
+      "preparing": "Getting the photo ready...",
+      "ready": "The photo is ready",
+      "previewAlt": "The photo you chose",
+      "another": "A different photo",
+      "send": "Send",
+      "unreadable": "I couldn't open that photo. You can try another one or write instead.",
+      "offline": "There's no connection right now. The photo stays here, and you can send it when the connection is back."
+    },
+    "photoUnavailable": {
+      "title": "Photo analysis is not active yet",
+      "body": "For now you can write what you ate.",
+      "writeInstead": "Write instead"
+    },
+    "text": {
+      "title": "What did you eat?",
+      "placeholder": "For example: two slices of bread with cheese and coffee",
+      "hint": "Write the way you'd talk. Exact amounts aren't needed.",
+      "send": "Send",
+      "sendManual": "Save as a list",
+      "manualNote": "Automatic analysis isn't available right now, so I'll keep what you wrote as a list. You can fix amounts and time afterwards.",
+      "empty": "Write a few words about what you ate.",
+      "draftRestored": "I brought back what you had started writing.",
+      "offline": "There's no connection right now. What you wrote stays here, and you can send it when the connection is back."
+    },
+    "processing": {
+      "title": "Trying to understand what you ate...",
+      "slow": "This is taking a bit longer than usual. You can keep waiting, or write instead.",
+      "slowText": "This is taking a bit longer than usual. You can keep waiting, or cancel.",
+      "cancel": "Cancel",
+      "cancelled": "Okay, I stopped. What you entered is still here."
+    },
+    "problem": {
+      "ai_unavailable": {
+        "title": "Automatic understanding isn't available right now",
+        "body": "You can keep what you wrote as a list and fix it afterwards.",
+        "bodyPhoto": "You can write what you ate instead, and I'll organize it."
+      },
+      "daily_cap": {
+        "title": "Automatic understanding has reached its limit for today",
+        "body": "You can keep what you wrote as a list and fix it afterwards. It will work again tomorrow.",
+        "bodyPhoto": "You can write what you ate instead. It will work again tomorrow."
+      },
+      "rate_limited": {
+        "title": "I got a lot at once",
+        "body": "You can try again in a minute, or keep what you wrote as a list.",
+        "bodyPhoto": "You can try again in a minute, or write what you ate instead."
+      },
+      "ai_error": {
+        "title": "I couldn't understand this one",
+        "body": "You can try again, or simply write what you ate."
+      },
+      "nothing_found": {
+        "title": "I didn't find food here to understand",
+        "body": "You can try a different photo or description."
+      },
+      "not_signed_in": {
+        "title": "You need to sign in again",
+        "body": "After signing in you can come back to the report."
+      },
+      "invalid_input": {
+        "title": "Something in the report didn't work out",
+        "body": "You can check it and try again."
+      },
+      "too_large": {
+        "title": "The photo is too large",
+        "body": "You can try another photo or write instead."
+      },
+      "unsupported_type": {
+        "title": "I can't use that file",
+        "body": "You can try another photo or write instead."
+      },
+      "save_error": {
+        "title": "I couldn't save right now",
+        "body": "What you entered is still here, and you can try again."
+      },
+      "network": {
+        "title": "The connection dropped",
+        "body": "The report may already have arrived. You can check, or try again."
+      },
+      "action": {
+        "retry": "Try again",
+        "writeInstead": "Write instead",
+        "saveAsWritten": "Keep it as I wrote it",
+        "checkPending": "Check",
+        "goHome": "To Home",
+        "signIn": "To sign in"
+      }
+    },
+    "quiet": {
+      "title": "The app is quiet now",
+      "body": "There is no need to report right now. When this time ends, we'll continue from there.",
+      "cta": "Back to Home"
+    },
+    "unavailable": {
+      "title": "I couldn't load this just now",
+      "body": "That's fine. You can go back to Home and try again in a moment."
+    },
+    "confirm": {
+      "title": "This is what I understood",
+      "titleManual": "Here is what you wrote, as a list",
+      "manualNote": "I didn't analyze it, so you can add amounts and time in the fix if that matters to you.",
+      "fakeNote": "Test result (fake), not a real analysis.",
+      "refreshed": "This screen was updated to show the latest change.",
+      "notSaved": "I couldn't save right now. You can try again.",
+      "maybe": "Maybe",
+      "estimateNote": "Amounts are estimates.",
+      "unclearTitle": "I couldn't make out:",
+      "unclearHint": "You can add it in the fix.",
+      "when": "{meal} · {day} at {time}",
+      "whenOther": "{meal} · at {time}",
+      "fix": "Something wrong? Fix it",
+      "save": "Save",
+      "saving": "Saving...",
+      "notNow": "Not now"
+    },
+    "mealType": {
+      "breakfast": "Breakfast",
+      "lunch": "Lunch",
+      "dinner": "Dinner",
+      "snack": "Snack",
+      "other": "Other"
+    },
+    "day": {
+      "today": "today",
+      "yesterday": "yesterday"
+    },
+    "portion": {
+      "size": {
+        "small": "small portion",
+        "medium": "medium portion",
+        "large": "large portion"
+      },
+      "about": "about {portion}",
+      "half": "half a {unit}"
+    },
+    "unit": {
+      "piece": "{count, plural, one {# piece} other {# pieces}}",
+      "slice": "{count, plural, one {# slice} other {# slices}}",
+      "cup": "{count, plural, one {# cup} other {# cups}}",
+      "bowl": "{count, plural, one {# bowl} other {# bowls}}",
+      "plate": "{count, plural, one {# plate} other {# plates}}",
+      "tablespoon": "{count, plural, one {# tablespoon} other {# tablespoons}}",
+      "teaspoon": "{count, plural, one {# teaspoon} other {# teaspoons}}",
+      "handful": "{count, plural, one {# handful} other {# handfuls}}",
+      "can": "{count, plural, one {# can} other {# cans}}",
+      "bottle": "{count, plural, one {# bottle} other {# bottles}}",
+      "gram": "{count, plural, one {# gram} other {# grams}}",
+      "ml": "{count, plural, one {# ml} other {# ml}}"
+    },
+    "unitOne": {
+      "piece": "piece",
+      "slice": "slice",
+      "cup": "cup",
+      "bowl": "bowl",
+      "plate": "plate",
+      "tablespoon": "tablespoon",
+      "teaspoon": "teaspoon",
+      "handful": "handful",
+      "can": "can",
+      "bottle": "bottle",
+      "gram": "gram",
+      "ml": "ml"
+    },
+    "edit": {
+      "title": "Edit the meal",
+      "lead": "You can change anything. After saving we'll go back to the confirmation.",
+      "foodLabel": "Food {n}",
+      "portion": "Portion",
+      "portionNone": "Not specified",
+      "portionAmount": "Exact amount",
+      "amount": "How many",
+      "unit": "Unit",
+      "unitChoose": "Choose a unit",
+      "remove": "Remove",
+      "removeFor": "Remove {food}",
+      "add": "Add a food",
+      "mealType": "Meal type",
+      "day": "Day",
+      "time": "Time",
+      "save": "Save the change",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "errorsTitle": "To save, you can adjust:",
+      "errors": {
+        "no_items": "There needs to be at least one food.",
+        "too_many_items": "You can keep up to {max} items.",
+        "name_too_long": "The name is too long.",
+        "amount_invalid": "The amount needs to be a number above zero.",
+        "unit_missing": "Choose a unit for the amount.",
+        "meal_type_invalid": "Choose a meal type from the list.",
+        "time_invalid": "Write a time like 13:30.",
+        "time_future": "That time hasn't come yet. Choose an earlier time, or yesterday.",
+        "time_too_old": "You can fix meals up to two days back.",
+        "not_saved": "I couldn't save right now. What you entered is still here, and you can try again."
+      }
+    },
+    "saved": {
+      "title": "Saved",
+      "body": "The meal was added.",
+      "first": "Got it. I've already started getting to know a little of how your food looks. There's nothing more you need to do now.",
+      "back": "Back"
     }
   },
   "home": {

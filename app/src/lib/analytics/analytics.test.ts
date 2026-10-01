@@ -28,7 +28,7 @@ describe("track", () => {
     await expect(track(new NoopSink(), "meal_saved", { note: longText })).rejects.toThrow(/content/);
   });
 
-  it("knows the 15 agreed events", () => {
-    expect(ANALYTICS_EVENTS).toHaveLength(15);
+  it("knows the 17 agreed events", () => {
+    expect(ANALYTICS_EVENTS).toHaveLength(17);
   });
 });

@@ -73,7 +73,7 @@ describe("app message catalogs", () => {
   // catalog-wide test in interventions/library.test.ts covers the rest. Keys count too, so the
   // text under test is the whole namespace as JSON.
   describe("copy lint", () => {
-    const NAMESPACES = ["nav", "report", "home", "progress", "coach", "me", "notFound"] as const;
+    const NAMESPACES = ["nav", "report", "food", "home", "progress", "coach", "me", "notFound"] as const;
     const forbidden = {
       he: ["!", "החמצת", "פספסת", "ציון", "אחוז", "רצף", "חרגת", "נכשל", "מתחילים מחדש", "להתחיל מחדש"],
       en: ["!", "missed", "score", "percent", "streak", "failed", "overdue", "behind", "start over"],

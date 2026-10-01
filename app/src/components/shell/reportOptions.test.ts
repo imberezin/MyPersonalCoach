@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SHELL_MESSAGE_KEYS } from "./messageKeys";
+import { FOOD_ROUTES } from "@/domain/food/routes";
 import { REPORT_OPTIONS } from "./reportOptions";
 
 describe("REPORT_OPTIONS", () => {
@@ -32,11 +33,20 @@ describe("REPORT_OPTIONS", () => {
     expect(REPORT_OPTIONS.some((option) => option.emoji.includes("🎙"))).toBe(false);
   });
 
-  it("is inactive today, and a row that is a link points at a path inside the app", () => {
+  it("links food, photo and writing to the food flow, and leaves the other four inactive", () => {
     for (const option of REPORT_OPTIONS) {
       expect(option.href === null || option.href.startsWith("/"), option.id).toBe(true);
     }
-    expect(REPORT_OPTIONS.every((option) => option.href === null)).toBe(true);
+    const hrefs = Object.fromEntries(REPORT_OPTIONS.map((option) => [option.id, option.href]));
+    expect(hrefs).toEqual({
+      food: FOOD_ROUTES.chooser,
+      activity: null,
+      weight: null,
+      sleep: null,
+      feeling: null,
+      photo: FOOD_ROUTES.photo,
+      text: FOOD_ROUTES.text,
+    });
   });
 });
 

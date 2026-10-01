@@ -48,3 +48,7 @@ next-env.d.ts
 /supabase/.temp
 /supabase/.branches
 /supabase/.env
+
+# Hebrew bake-off: your photos, their labels and the raw results stay on your computer (the repo is public)
+/bake-off/photos/
+/bake-off/results/
