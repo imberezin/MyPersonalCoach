@@ -29,6 +29,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // The build folder of `npm run dev:hosted`, which runs next to `npm run dev`.
+    ".next-hosted/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

@@ -17,3 +17,21 @@ export function getSupabasePublicConfig(): SupabasePublicConfig | null {
 export function isSupabaseConfigured(): boolean {
   return getSupabasePublicConfig() !== null;
 }
+
+/**
+ * True when the URL points at the Supabase running on this machine (npm run local:start). The
+ * development-only tools use it to stay away from a real, hosted project.
+ */
+export function isLocalSupabaseUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const { hostname } = new URL(url);
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+export function isLocalSupabase(): boolean {
+  return isLocalSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+}

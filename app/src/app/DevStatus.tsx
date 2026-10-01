@@ -1,7 +1,9 @@
 import { isOffline } from "@/domain/offline";
 import { getLocale, getTranslations } from "@/i18n/server";
 import { computeNextShabbat, defaultCandleLightingMinutes } from "@/lib/shabbat";
+import { isLocalSupabase } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { replayOnboardingForDev } from "./actions";
 import styles from "./home.module.css";
 
 // Jerusalem is used only until the user chooses a city during onboarding.
@@ -50,6 +52,9 @@ export async function DevStatus() {
     <section className={styles.dev} aria-label={t("title")}>
       <h2>{t("title")}</h2>
       <dl>
+        <dt>{t("backend")}</dt>
+        <dd>{isLocalSupabase() ? t("backendLocal") : t("backendHosted")}</dd>
+
         <dt>{t("signedInAs")}</dt>
         <dd dir="ltr">{user?.email ?? "-"}</dd>
 
@@ -65,6 +70,15 @@ export async function DevStatus() {
         <dt>{t("offlineNow")}</dt>
         <dd>{offline ? t("yes") : t("no")}</dd>
       </dl>
+
+      {isLocalSupabase() ? (
+        <form action={replayOnboardingForDev} className={styles.devAction}>
+          <button type="submit" className={styles.secondary}>
+            {t("replayOnboarding")}
+          </button>
+          <p className={styles.devHint}>{t("replayOnboardingHint")}</p>
+        </form>
+      ) : null}
     </section>
   );
 }

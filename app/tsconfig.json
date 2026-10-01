@@ -28,6 +28,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
+    ".next-hosted/types/**/*.ts",
+    ".next-hosted/dev/types/**/*.ts",
     "**/*.mts"
   ],
   "exclude": ["node_modules"]

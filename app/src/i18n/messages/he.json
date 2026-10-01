@@ -41,7 +41,12 @@
     "nextShabbat": "השבת הקרובה (ברירת מחדל: ירושלים)",
     "offlineNow": "במצב Offline עכשיו",
     "yes": "כן",
-    "no": "לא"
+    "no": "לא",
+    "replayOnboarding": "הצג שוב את מסכי ה-Onboarding",
+    "replayOnboardingHint": "לפיתוח בלבד. התשובות שלך נשמרות ויופיעו בכל מסך.",
+    "backend": "מסד נתונים",
+    "backendLocal": "מקומי (Docker)",
+    "backendHosted": "מארח (Supabase)"
   },
   "interventions": {
     "pause": {

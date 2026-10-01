@@ -41,7 +41,12 @@
     "nextShabbat": "Next Shabbat (default: Jerusalem)",
     "offlineNow": "Offline right now",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "replayOnboarding": "Show the onboarding screens again",
+    "replayOnboardingHint": "Development only. Your answers are kept and shown on each screen.",
+    "backend": "Database",
+    "backendLocal": "Local (Docker)",
+    "backendHosted": "Hosted (Supabase)"
   },
   "interventions": {
     "pause": {

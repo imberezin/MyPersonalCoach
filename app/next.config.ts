@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Next 16 locks the build folder, so two dev servers can only run side by side with a folder each.
+  // `npm run dev:hosted` sets NEXT_DIST_DIR=.next-hosted; every other run (and every build) uses .next.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Dev only: lets the dev server (hot reload) be opened through 127.0.0.1 as well as localhost.
   allowedDevOrigins: ["127.0.0.1"],
   async headers() {

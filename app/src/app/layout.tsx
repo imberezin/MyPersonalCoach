@@ -3,6 +3,7 @@ import { Rubik } from "next/font/google";
 import { IntlClientProvider } from "@/i18n/IntlClientProvider";
 import { localeDirection } from "@/i18n/config";
 import { getLocale, getMessages, getTranslations } from "@/i18n/server";
+import { isLocalSupabase } from "@/lib/supabase/config";
 import { THEME_COLOR } from "@/styles/brandColors";
 import "./globals.css";
 
@@ -16,8 +17,10 @@ const rubik = Rubik({
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("app");
+  // Development only: tells two browser tabs apart when the local and the hosted dev servers run side by side.
+  const devMarker = process.env.NODE_ENV === "development" ? (isLocalSupabase() ? "[local] " : "[hosted] ") : "";
   return {
-    title: t("name"),
+    title: devMarker + t("name"),
     description: t("tagline"),
     appleWebApp: { capable: true, title: t("shortName"), statusBarStyle: "default" },
     icons: {

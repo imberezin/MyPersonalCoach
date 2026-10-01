@@ -11,7 +11,9 @@ Next.js 16 (App Router) · TypeScript · CSS Modules + design tokens · Supabase
 ## Commands
 
 ```bash
-npm run dev         # http://localhost:3000
+npm run dev         # http://localhost:3000, against the local Supabase (Docker)
+npm run dev:hosted  # http://localhost:3001, against the hosted project (uses the *_1 values in .env.local)
+npm run dev:both    # both of the above in one terminal; the tab title says [local] or [hosted]
 npm run local:start # local Supabase in Docker (Docker Desktop must be running)
 npm run local:setup # writes .env.local from the local stack and creates a local dev user
 npm run local:stop  # stop it (data is kept); local:reset wipes the data and reapplies the migrations
