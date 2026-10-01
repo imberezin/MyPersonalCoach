@@ -1,77 +1,39 @@
-// Generates placeholder PWA icons (no dependencies). Replace public/icons/* with real artwork later.
-// Usage: npm run icons
-import { mkdirSync, writeFileSync } from "node:fs";
-import { deflateSync } from "node:zlib";
+// Derives the PWA icons from the brand logo (public/MyIcons/logo.png). Usage: npm run icons
+// The originals in public/MyIcons are never modified; everything in public/icons is generated.
+import { mkdirSync } from "node:fs";
+import sharp from "sharp";
 
-const ACCENT = [0x2b, 0x7a, 0x6a];
-const WHITE = [0xff, 0xff, 0xff];
+const SOURCE = "public/MyIcons/logo.png"; // 1024x1024, the emblem on a transparent background
+const OUT = "public/icons";
+// --color-background from the Brand & Color System document (tests/design/tokens.test.ts keeps them
+// equal). Maskable and Apple icons must be opaque squares.
+const BACKGROUND = "#faf9f6";
+const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 
-const crcTable = Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
+mkdirSync(OUT, { recursive: true });
 
-function crc32(buf) {
-  let c = 0xffffffff;
-  for (const byte of buf) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
+const emblem = (size) => sharp(SOURCE).resize(size, size, { fit: "contain", background: TRANSPARENT });
+
+/** The emblem on a transparent square (purpose "any"). */
+async function plain(size, file) {
+  await emblem(size).png({ compressionLevel: 9 }).toFile(`${OUT}/${file}`);
 }
 
-function chunk(type, data) {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([length, body, crc]);
+/** The emblem scaled to `ratio` of the side, centered on an opaque square of the background color. */
+async function onBackground(size, ratio, file) {
+  const inner = Math.round(size * ratio);
+  const logo = await emblem(inner).toBuffer();
+  await sharp({ create: { width: size, height: size, channels: 3, background: BACKGROUND } })
+    .composite([{ input: logo, gravity: "center" }])
+    .png({ compressionLevel: 9 })
+    .toFile(`${OUT}/${file}`);
 }
 
-function png(size, drawPixel) {
-  const raw = Buffer.alloc(size * (size * 3 + 1));
-  for (let y = 0; y < size; y++) {
-    raw[y * (size * 3 + 1)] = 0; // filter: none
-    for (let x = 0; x < size; x++) {
-      const [r, g, b] = drawPixel(x, y, size);
-      const i = y * (size * 3 + 1) + 1 + x * 3;
-      raw[i] = r;
-      raw[i + 1] = g;
-      raw[i + 2] = b;
-    }
-  }
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(size, 0);
-  header.writeUInt32BE(size, 4);
-  header[8] = 8; // bit depth
-  header[9] = 2; // RGB
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", header),
-    chunk("IDAT", deflateSync(raw)),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
+await plain(192, "icon-192.png");
+await plain(512, "icon-512.png");
+// Maskable: the platform may crop to a circle, so keep the emblem inside the central 80% safe zone.
+await onBackground(512, 0.8, "icon-maskable-512.png");
+// iOS ignores transparency and applies its own rounded mask, so give it an opaque square with a margin.
+await onBackground(180, 0.86, "apple-touch-icon.png");
 
-const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
-
-/** A white plate (ring + disc) on the accent color. `scale` shrinks it for the maskable safe zone. */
-function plate(scale) {
-  return (x, y, size) => {
-    const c = size / 2;
-    const d = Math.hypot(x + 0.5 - c, y + 0.5 - c);
-    const outer = size * 0.34 * scale;
-    const ring = size * 0.045 * scale;
-    const inner = size * 0.2 * scale;
-    const edge = (r) => Math.min(1, Math.max(0, r - d + 0.5)); // 1px antialiasing
-    const ringCoverage = Math.max(0, edge(outer) - edge(outer - ring));
-    const discCoverage = edge(inner);
-    return mix(ACCENT, WHITE, Math.max(ringCoverage, discCoverage));
-  };
-}
-
-mkdirSync("public/icons", { recursive: true });
-writeFileSync("public/icons/icon-192.png", png(192, plate(1)));
-writeFileSync("public/icons/icon-512.png", png(512, plate(1)));
-writeFileSync("public/icons/icon-maskable-512.png", png(512, plate(0.78)));
-writeFileSync("public/icons/apple-touch-icon.png", png(180, plate(1)));
-console.log("wrote public/icons/*.png");
+console.log("wrote public/icons/* from", SOURCE);

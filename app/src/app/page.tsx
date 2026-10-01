@@ -1,3 +1,4 @@
+import { Logo } from "@/components/Logo";
 import { getTranslations } from "@/i18n/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { signOut } from "./actions";
@@ -11,6 +12,9 @@ export default async function HomePage() {
     return (
       <main className={styles.main}>
         <section className={styles.card}>
+          <div className={styles.brandMark}>
+            <Logo size={64} priority />
+          </div>
           <h1>{t("setup.title")}</h1>
           <p>{t("setup.body")}</p>
           <p>
@@ -24,6 +28,9 @@ export default async function HomePage() {
   return (
     <main className={styles.main}>
       <section className={styles.card}>
+        <div className={styles.brandMark}>
+          <Logo size={64} priority />
+        </div>
         <h1>{t("home.greeting")}</h1>
         <p>{t("home.placeholder")}</p>
         <form action={signOut}>

@@ -53,5 +53,6 @@ tests/db/              RLS tests on real Postgres
 - **Secrets stay on the server.** Only `NEXT_PUBLIC_*` values reach the browser.
 - **Every table has RLS**, and `tests/db/rls.test.ts` fails if one does not.
 - **Free first.** Prefer services with a real free tier, and re-check limits before relying on them.
+- **Design follows one document.** `../Personal Eating Coach — Brand & Color System.md` is the only authority for colors, type, radii and visual tone. Use the `--color-*` tokens in `src/styles/tokens.css`, never hex values, and never let a color judge food or the user. `tests/design/tokens.test.ts` enforces it. Dark Mode is not a Phase 1 goal.
 
 This is Next.js 16: conventions changed (for example `proxy` replaced `middleware`). Check `node_modules/next/dist/docs/` before writing framework code.

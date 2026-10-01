@@ -1,6 +1,6 @@
 # Personal Eating Coach — Phase 1 TODO
 
-נבנה מתוך מסמכי האפיון בתיקייה ועודכן בהתאם להחלטות של 2026-10-01 (ראה [Technology Stack.md](<Technology Stack.md>) ו-[INTERVENTIONS.md](INTERVENTIONS.md)). הפניות בסוגריים: `Screen §` = `# Personal Eating Coach.md` (מסמך המסכים המפורט), `Prod` / `UX` / `ScreenSpec` = שלושת קבצי ה"פרומפט", `Rules` = `כללי-מוצר.md`.
+נבנה מתוך מסמכי האפיון בתיקייה ועודכן בהתאם להחלטות של 2026-10-01 (ראה [Technology Stack.md](<Technology Stack.md>) ו-[INTERVENTIONS.md](INTERVENTIONS.md)). הפניות בסוגריים: `Screen §` = `# Personal Eating Coach.md` (מסמך המסכים המפורט), `Prod` / `UX` / `ScreenSpec` = שלושת קבצי ה"פרומפט", `Rules` = `כללי-מוצר.md`, `Brand §` = [Personal Eating Coach — Brand & Color System.md](<Personal Eating Coach — Brand & Color System.md>) (מיתוג וצבעים: **המקור היחיד להחלטות ויזואליות**).
 
 עדיפויות לפי `Screen §32`: **P0** = Core Loop, **P1** = Behavioral Support, **P2** = Supporting. P2 לא מעכב את הניסוי.
 
@@ -8,8 +8,9 @@
 
 ## סטטוס עכשיו (2026-10-01)
 
-- ✅ **בוצע:** כל התשתית שלפני המסכים: שלד האפליקציה, בסיס נתונים עם RLS, הלוגיקה הדטרמיניסטית עם בדיקות, הרצה מקומית מלאה, ו-repo ב-GitHub (`main` מעודכן, commit `7dbf8ea`). פירוט: סעיף 1, "נבנה".
-- **בעבודה עכשיו:** סעיף 2.1, Onboarding (A1–A12).
+- ✅ **בוצע:** כל התשתית שלפני המסכים (שלד האפליקציה, בסיס נתונים עם RLS, הלוגיקה הדטרמיניסטית עם בדיקות, הרצה מקומית מלאה, repo ו-CI ירוק ב-GitHub), וגם מערכת העיצוב לפי מסמך המיתוג: tokens, בדיקה אוטומטית שאוכפת אותם, אייקוני PWA ולוגו במסך הכניסה ובבית. פירוט: סעיף 1, "נבנה".
+- **בעבודה עכשיו:** סעיף 2.1, Onboarding (A1–A12). שלב התכנון כמעט גמור: חמישה קוראים סרקו את האפיון, הסכמה, Next 16, חישוב שבת לפי עיר ו-Push, ושלוש תוכניות מימוש מתחרות דורגו על ידי שלושה שופטים; נשארה הסינתזה לתוכנית אחת. אחריה: מימוש מקביל (בסיס נתונים, דומיין, שרת, ממשק), סקירה עוינת ובדיקה בדפדפן. כל מסך נבנה לפי מסמך המיתוג.
+- 🎨 **עיצוב:** פועלים רק לפי מסמך ה-Brand & Color System: tokens בלבד, בלי צבעים בתוך קומפוננטות, והצבעים אף פעם לא שופטים אוכל או משתמש. נאכף בבדיקה אוטומטית (סעיף 0).
 - **הבא בתור, לפי סדר מימוש (הוחלט ב-2026-10-01, ראה סעיף 0):**
   1. Home + ניווט תחתון (סעיף 2.4): זה היעד של A12 (`FIRST_WEEK_STARTED → HOME`)
   2. Report + Food: טקסט ותמונה קודם, קול אחר כך (סעיף 2.2). לפני מסך האישור D6 צריך את ה-adapters של Gemini ו-Groq ואת ה-bake-off בעברית (סעיף 1, "נשאר לבנות")
@@ -48,7 +49,8 @@
   - התראות: 5 סוגים (Coach, דיווח ארוחות, פעילות, שקילה שבועית, סיכום שבועי) + quiet hours.
   - סוגי `OfflinePeriod`: SHABBAT, HOLIDAY, USER_DEFINED. VACATION כסוג עתידי בלבד (מופיע רק במסמכי ה-stack).
   - **סדר מימוש (נקבע ב-2026-10-01 בהאצלת סמכות מהמשתמש):** Onboarding → Home + ניווט → Report + Food → First Week → Weekly Learning. לפי תלויות: Home הוא היעד של A12, ו-B2–B6 דורשים דיווחים אמיתיים. סעיף 8 נשאר סדר העיצוב.
-- [x] **מיתוג (החלטת המשתמש, 2026-10-01):** קבצי הלוגו ב-`app/public/MyIcons/` הם המיתוג. משמשים **גם** לאייקוני ה-PWA וה-favicon **וגם** כלוגו בתוך האפליקציה (מסך כניסה וכותרת). הבאנר מיועד ל-A1 Welcome. הצבעים ב-`src/styles/tokens.css` נגזרים מהם (במקום הערכים הזמניים).
+- [x] **מערכת עיצוב ומיתוג (החלטת המשתמש, 2026-10-01): [Personal Eating Coach — Brand & Color System.md](<Personal Eating Coach — Brand & Color System.md>) הוא המקור היחיד לכל החלטה ויזואלית, ופועלים רק לפיו.** פלטה: ירוק מרווה (Primary), חול חם (Secondary), קורל רך (Accent), רקע `#FAF9F6`. שמות ה-tokens קבועים במסמך (`--color-primary` וכו'), אין צבעים בתוך קומפוננטות, צבעים לא שופטים אוכל או משתמש, Error רק למצב טכני, Dark Mode לא ב-Phase 1 (הארכיטקטורה מוכנה). נאכף ב-`app/tests/design/tokens.test.ts`.
+- [x] **לוגו (החלטת המשתמש, 2026-10-01):** קבצי `app/public/MyIcons/` משמשים **גם** לאייקוני ה-PWA וה-favicon **וגם** כלוגו בתוך האפליקציה (מסך כניסה וכותרת). הבאנר ל-A1 Welcome. הצבעים **לא** נגזרים מהלוגו אלא ממסמך המיתוג.
 
 ### ✅ אושר ב-2026-10-01 (מחקר טכנולוגי, פרטים ב-[Technology Stack.md](<Technology Stack.md>))
 
@@ -70,6 +72,8 @@
 - [ ] **Bake-off בעברית** לבחירת ספק ה-AI הראשי, ואימות ש-Groq תומך בתמונה יחד עם JSON schema ושהוא זמין בישראל.
 - [ ] **אימות `pg_cron`** בתוכנית Free של Supabase כשהפרויקט נוצר (אחרת Cloudflare Workers cron).
 - [ ] **שאלות פתוחות נוספות:** `Technology Stack.md` פרק 21 (דקות הדלקת נרות לפי עיר, מקום לגיבוי, מגבלות גודל בקשה, ספק תמלול).
+- [ ] **פונט (Brand §11):** המסמך דורש לבדוק בפועל איזה פונט נותן את התוצאה הטובה ביותר בעברית ובאנגלית לפני החלטה סופית. כרגע Rubik (עגול, עברית ולטינית) כזמני, דרך `--font-family`. מועמדים: Inter + Noto Sans Hebrew (הדוגמה במסמך), Rubik, Heebo.
+- [ ] **ניגודיות בפלטה של המסמך (החלטה שלך):** עם הערכים שבמסמך, טקסט לבן על Primary נותן 3.14:1, Text Muted על הרקע 2.52:1 ו-Error כטקסט על לבן 3.64:1, כולם מתחת ל-4.5:1 של WCAG AA לטקסט רגיל. (Text Primary 12.53:1, Text Secondary 4.68:1 ו-Primary Dark על לבן 5.15:1 עוברים.) כרגע, בלי לסטות מהמסמך: כפתורי CTA בגודל Body Large ומודגשים (מספיק לטקסט גדול, 3:1), קישורים ב-Primary Dark, שגיאות כטקסט כהה על Error Light, ו-Text Muted אסור כצבע טקסט (נאכף בבדיקה). אם תרצה AA מלא גם בכפתור, אפשר להכהות מעט את Primary במסמך.
 
 ---
 
@@ -93,10 +97,13 @@
 - [x] **נתיב Cron:** `/api/engine/tick` מחזיר 503 בלי `CRON_SECRET` ו-401 בלי header נכון.
 - [x] **CI (הגדרה):** `.github/workflows/ci.yml` (lint, טיפוסים, בדיקות, build). הריצה הראשונה ב-GitHub נכשלה בשלב typecheck (`Cannot find name 'LayoutProps'`) כי ב-checkout נקי אין עדיין טיפוסי ה-routes ש-Next מייצר. תוקן: `typecheck` מריץ קודם `next typegen` (commit `7dbf8ea`, נדחף ל-`main`). בסשן הקודם נבדק על checkout נקי עם `npm ci`: lint, טיפוסים, 119 בדיקות ו-build עוברים. ריצת ה-CI בענן אחרי התיקון ירוקה: ריצה `36843864246`, כל השלבים כולל build.
 - [x] **הרצה מקומית מלאה** (`npm run local:start` + `local:setup` + `dev`, פירוט ב-[SETUP-CHECKLIST.md](SETUP-CHECKLIST.md) סעיף 1ב): Supabase בתוך Docker, המיגרציה הוחלה על תמונת Postgres האמיתית של Supabase (21 טבלאות, RLS בכולן), משתמש פיתוח נוצר, פרופיל נוצר אוטומטית, כניסה ויציאה עובדות, ופאנל "בדיקת מערכת" בבית (רק בפיתוח, `src/app/DevStatus.tsx`) מאשר: משתמש, פרופיל, RLS וזמני שבת. הרשמה ציבורית כבויה בעוד ספק האימייל דלוק (`supabase/config.toml`). בדרך תוקנו: `suppressHydrationWarning` על ה-body (תוספי דפדפן מזריקים תכונות), אזור זמן ברירת מחדל `Asia/Jerusalem` ו-`allowedDevOrigins`. (תוצאות ההרצה מהסשן הקודם; הקוד והסקריפטים אומתו בקוד.)
+- [x] **מערכת עיצוב לפי Brand & Color System (2026-10-01):** `src/styles/tokens.css` מכיל את כל ה-tokens של המסמך בשמות ובערכים שלו (ירוק מרווה, חול, קורל, ניטרליים, semantic, רדיוסים, היררכיית טיפוגרפיה, צל עדין), בלי Dark Mode. מסכי הכניסה והבית עברו אליו. `tests/design/tokens.test.ts` (21 בדיקות) נכשל אם token סוטה מהמסמך, אם קומפוננטה מכילה צבע קשיח, או אם צבע מותג משמש כצבע טקסט, ואומת שהוא באמת נכשל על סטייה. אייקוני ה-PWA וה-favicon נוצרים מ-`MyIcons/logo.png` (`npm run icons`, עם `sharp`), והלוגו מופיע במסך הכניסה ובבית (`src/components/Logo.tsx`). הרצה מקומית: lint, טיפוסים ו-140 בדיקות עוברים.
 
 ### נשאר לבנות
 
-- [ ] **שילוב הלוגו (בעבודה):** `logo.png` הוא המקור לאייקוני ה-PWA (192, 512, maskable, apple-touch) ול-favicon; הצבעים ב-`tokens.css` נגזרים ממנו; הלוגו מופיע במסך הכניסה ובכותרת; `logo-banner` ב-A1 Welcome.
+- [ ] **לוגו בכותרת הקבועה ובאנר ב-A1 Welcome:** מגיעים עם בניית Home ו-Onboarding (הלוגו כבר מופיע במסך הכניסה ובבית הזמני). הבאנר הוא איור על רקע קרם משלו, לכן מציגים אותו ככרטיס מעוגל (`--radius-xl`) ולא כרקע של כל המסך.
+- [ ] **רכיבי primitive של ה-Design System (Brand §29):** Button (Primary / Secondary / Tertiary לפי §15), Card (§16), Input, הודעה (Attention / Error / Success), Chip. נבנים מ-tokens בלבד, בצמוד ל-Onboarding. הארכיטקטורה: Brand → Tokens → Theme → Primitive → Product components → Screens.
+- [ ] **Copy lint לקול המותג (Brand §24, §28):** להרחיב את בדיקת השפה (סעיף 6) כך שתסרוק את כל הודעות he/en.
 - [ ] **Mobile-first layout** וניווט תחתון: `Home | Progress | Report | Coach | Me`, כש-Report פותח Bottom Sheet. נבנה עם Home.
 - [ ] **ממשק `ActivityDataSource`** (העמודה `source` קיימת; הממשק עצמו עוד לא).
 - [ ] **Behavior Engine:** הפונקציה הטהורה `decide(input, now)` (Context → Eligibility → Cooldown → Gates → אחת / ASK / DO_NOTHING), בדיקות לכללים (תקציב, cooldown לפי התערבות + הקשר, רעב אמיתי לפני אכילה, Offline גובר).
@@ -254,6 +261,7 @@
 - [ ] **בדיקת שפה (copy lint):** לא להשתמש ב-failed / ruined / missed target / start over / compensation וכו' (`§2.6`); להעדיף noticed / learned / tried / returned
 - [ ] **תוכן ראשוני:** כל הטקסטים בעברית (המסמך כבר מכיל דוגמאות) + תרגום לאנגלית
 - [ ] לא מסכים חדשים כשאפשר state קיים (`§33`)
+- [ ] **מבחן "עזרה או ציון" (Brand §26) ו-15 הכללים הבלתי-מתפשרים (§28)** לכל מסך לפני שהוא נחשב גמור: בלי בושה, בלי ענישה, בלי מוסריות של אוכל, בלי ציון ירוק/אדום לאוכל, בלי דירוג משתמשים, והשתיקה היא מצב תקין
 
 ---
 
