@@ -44,6 +44,24 @@ npm run dev
 | `npm run local:start` | מפעיל אותו שוב |
 | `npm run local:reset` | מוחק את הנתונים ומריץ את המיגרציות מחדש (אחריו להריץ שוב `npm run local:setup`) |
 
+### איפוס ה-Onboarding לבדיקה חוזרת
+
+כדי לעבור את ה-Onboarding שוב מההתחלה, הרץ ב-Studio (**SQL Editor**) את הקוד הבא. הוא מחזיר את הפרופיל, ההתראות והשבתות האוטומטיות למצב של משתמש חדש, ולא נוגע בחשבון עצמו. הקוד מוגבל למשתמש אחד לפי המייל שבו (החלף אותו אם צריך), כדי לא לאפס משתמשים אחרים במסד:
+
+```sql
+update public.profiles set lifecycle_state='NEW', onboarding_step=null, onboarding_completed_at=null, first_week_started_at=null,
+  goal_type='none', goal_weight_kg=null, start_weight_kg=null, goal_focus='{}', observes_shabbat=null, wants_other_offline=false,
+  place_key=null, city=null, latitude=null, longitude=null, in_israel=null, candle_lighting_minutes=null,
+  age=null, height_cm=null, motivation=null, kashrut='{}', food_preferences='{}', activity_preferences='{}'
+  where user_id = (select id from auth.users where email = 'dev@eating-coach.test');
+delete from public.offline_periods where type='SHABBAT' and source='auto' and user_id = (select id from auth.users where email = 'dev@eating-coach.test');
+update public.user_preferences set notifications='{"coach":false,"meal_reporting":false,"activity":false,"weekly_weigh_in":false,"weekly_summary":false}'
+  where user_id = (select id from auth.users where email = 'dev@eating-coach.test');
+delete from public.push_subscriptions where user_id = (select id from auth.users where email = 'dev@eating-coach.test');
+```
+
+אחרי ההרצה פתח את `http://127.0.0.1:3000`, והאפליקציה תחזיר אותך למסך הפתיחה.
+
 ## 2. Supabase (חינם)
 
 1. היכנס ל-[supabase.com](https://supabase.com), צור פרויקט חדש בתוכנית **Free**, ובחר אזור קרוב אליך. שמור את סיסמת בסיס הנתונים.
@@ -58,7 +76,7 @@ Copy-Item .env.example .env.local
    - `NEXT_PUBLIC_SUPABASE_URL`: ה-Project URL
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: ה-Publishable key (מותר שיגיע לדפדפן)
    - `SUPABASE_SECRET_KEY`: ה-Secret key (**סוד**, שרת בלבד, לא לשתף ולא לשלוח לאף אחד)
-5. הרץ את סכמת בסיס הנתונים: ב-Supabase פתח **SQL Editor**, הדבק את כל התוכן של `app\supabase\migrations\20261001000000_init.sql` והרץ.
+5. הרץ את סכמת בסיס הנתונים: ב-Supabase פתח **SQL Editor**, והרץ **כל** קובץ בתיקייה `app\supabase\migrations\` לפי הסדר (לפי שם הקובץ, מהישן לחדש): הדבק את כל התוכן של קובץ אחד, הרץ, וחזור על זה עם הבא. לא מספיק `20261001000000_init.sql` לבדו.
 6. צור את המשתמש שלך: **Authentication → Users → Add user**. אימייל וסיסמה, וסמן אישור אוטומטי של המשתמש.
 7. כבה הרשמה ציבורית (ההגדרה שמאפשרת למשתמשים חדשים להירשם), כדי שאף אחד אחר לא יוכל ליצור חשבון. **אל תכבה את ספק ה-Email עצמו**: אז גם הכניסה שלך נחסמת ("Email logins are disabled"). זו בדיוק הטעות שנתפסה בהרצה המקומית.
 8. הפעל את `pg_cron` ו-`pg_net`: **Database → Extensions**. אם אחד מהם לא זמין בתוכנית Free, תגיד לי ונעבור ל-Cloudflare Workers cron.

@@ -15,5 +15,7 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     testTimeout: 30_000,
+    // Each PGlite suite boots a Postgres and applies every migration; with several starting at once the default 10 s is too tight.
+    hookTimeout: 60_000,
   },
 });

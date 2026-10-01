@@ -60,3 +60,43 @@ describe("computeNextShabbat", () => {
     expect(shabbat!.havdalah.getTime()).toBeGreaterThan(shabbat!.candleLighting.getTime());
   });
 });
+
+describe("candle-lighting minutes inside Israel", () => {
+  const telAviv = {
+    latitude: 32.08,
+    longitude: 34.78,
+    timezone: "Asia/Jerusalem",
+    inIsrael: true,
+    candleLightingMinutes: 20,
+    cityName: "Tel Aviv",
+    from: new Date("2026-10-01T09:00:00Z"),
+  };
+  const MINUTE_MS = 60_000;
+
+  // Hebcal would replace an explicit 18 by its own city default for an Israeli Location.
+  // The Location is built with il=false so the minutes the user confirmed are honoured.
+  it("honours an explicit 18 minutes in Tel Aviv", () => {
+    const at20 = computeNextShabbat(telAviv)!;
+    const at18 = computeNextShabbat({ ...telAviv, candleLightingMinutes: 18 })!;
+    expect(at18.candleLighting.getTime() - at20.candleLighting.getTime()).toBe(2 * MINUTE_MS);
+  });
+
+  it("honours an explicit 18 minutes in Jerusalem", () => {
+    const from = new Date("2026-10-01T09:00:00Z");
+    const at40 = computeNextShabbat({ ...jerusalem, from })!;
+    const at18 = computeNextShabbat({ ...jerusalem, candleLightingMinutes: 18, from })!;
+    expect(at18.candleLighting.getTime() - at40.candleLighting.getTime()).toBe(22 * MINUTE_MS);
+  });
+
+  it("does not move Havdalah when the candle-lighting minutes change", () => {
+    const havdalahs = [18, 20, 40].map(
+      (candleLightingMinutes) => computeNextShabbat({ ...telAviv, candleLightingMinutes })!.havdalah.toISOString(),
+    );
+    expect(new Set(havdalahs).size).toBe(1);
+  });
+
+  it("keeps the Jerusalem 40 minute result unchanged", () => {
+    const shabbat = computeNextShabbat({ ...jerusalem, from: new Date("2026-10-01T09:00:00Z") });
+    expect(shabbat?.candleLighting.toISOString()).toBe("2026-10-02T14:43:00.000Z");
+  });
+});

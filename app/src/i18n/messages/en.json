@@ -79,5 +79,213 @@
     "ask_instead": {
       "default": "Just a small question: what's closest to what's happening right now? Hunger, tiredness, stress, or just a craving?"
     }
+  },
+  "onboarding": {
+    "common": {
+      "back": "Back",
+      "skip": "Skip",
+      "saving": "Saving...",
+      "retry": "Try again",
+      "unavailableTitle": "Something did not load",
+      "unavailableBody": "The setup cannot load right now. You can try again in a moment."
+    },
+    "errors": {
+      "invalid_number": "Please enter a number here.",
+      "out_of_range": "The value needs to be between {min} and {max}.",
+      "too_long": "The text is too long. You can shorten it a little.",
+      "invalid_choice": "Something about the choice did not work out. Please try again.",
+      "conflicting_choices": "This cannot be selected together with the other option.",
+      "place_required": "To work out the Shabbat times, please choose a place.",
+      "unknown_place": "That place is not in the list. Choose the nearest city.",
+      "not_configured": "The app is not connected to Supabase yet.",
+      "unauthenticated": "You need to sign in again.",
+      "save_error": "I couldn't save. What you wrote is still here, so you can try again.",
+      "step_not_available": "This step is not available yet. We'll take you back to where you stopped.",
+      "profile_missing": "No profile was found. Try refreshing, and if it keeps happening, sign out and sign in again."
+    },
+    "welcome": {
+      "title": "Let's understand together how you eat",
+      "notDiet": "Not a diet.",
+      "notBans": "No bans.",
+      "body": "Just understanding what helps you eat and feel better.",
+      "cta": "Let's start"
+    },
+    "goals": {
+      "title": "What would you like to improve?",
+      "options": {
+        "lose_weight": "Lose weight",
+        "feel_lighter": "Feel lighter and healthier",
+        "improve_eating": "Improve my eating",
+        "be_active": "Be more active",
+        "understand_overeating": "Understand why I eat too much",
+        "not_sure": "I'm still not sure"
+      }
+    },
+    "weight": {
+      "title": "What is your weight today?",
+      "unit": "kg",
+      "hint": "This is only a starting point. There's no need to weigh yourself every day."
+    },
+    "goalWeight": {
+      "title": "Is there a weight you would like to reach?",
+      "unit": "kg",
+      "or": "or",
+      "decline": "I don't want to set a numeric goal"
+    },
+    "aboutYou": {
+      "title": "A few details so I can get to know you a little better",
+      "age": "Age",
+      "height": "Height",
+      "unit": "cm"
+    },
+    "movement": {
+      "title": "What does your movement usually look like?",
+      "options": {
+        "almost_none": "Almost inactive",
+        "some_walking": "Some walking",
+        "active_part_of_week": "Active part of the week",
+        "active_most_of_week": "Active most of the week",
+        "varies": "Varies a lot"
+      }
+    },
+    "food": {
+      "title": "Is there anything I should know about your food?",
+      "likes": "Food I like:",
+      "dislikes": "Food I don't like:",
+      "style": "Food style / things that are important for me to keep:"
+    },
+    "kashrut": {
+      "title": "Are there dietary restrictions or preferences I should know about?",
+      "options": {
+        "kashrut": "Kashrut",
+        "meat_dairy": "Meat / dairy",
+        "other_preferences": "Other preferences"
+      }
+    },
+    "offline": {
+      "title": "Are there times when you don't use your phone?",
+      "options": {
+        "shabbat": "Shabbat",
+        "other": "Other times",
+        "none": "No"
+      },
+      "placeLabel": "Where are you on Shabbat?",
+      "placeEmpty": "Choose a place",
+      "groupIsrael": "Israel",
+      "groupAbroad": "Abroad",
+      "placeHint": "Not on the list? Choose the nearest city.",
+      "minutesLabel": "Minutes before sunset for candle lighting",
+      "minutesHint": "The default depends on the place. You can change it, and pressing Continue confirms the value.",
+      "preview": {
+        "label": "Next Shabbat",
+        "candle": "Starts",
+        "havdalah": "Ends",
+        "inProgress": "Current Shabbat"
+      },
+      "otherNote": "We'll add other times later."
+    },
+    "why": {
+      "title": "Why is it important to you to make this change?",
+      "hint": "You can write a few words. You can also skip."
+    },
+    "notifications": {
+      "title": "How would you like me to be in touch?",
+      "options": {
+        "reporting": "Reminders to report",
+        "coach": "Suggestions from the coach",
+        "weekly_summary": "Weekly summary",
+        "weekly_weigh_in": "Weekly weigh-in"
+      },
+      "device": {
+        "title": "Would you like me to send notifications to this device?",
+        "body": "To send you what you chose, I need your permission for notifications on this device. You can also continue without them."
+      }
+    },
+    "push": {
+      "enable": "Turn on notifications",
+      "enabling": "Turning on...",
+      "enabled": "Notifications are on for this device.",
+      "checking": "Checking this device...",
+      "denied": "Notifications are blocked in the browser. You can change that in the device settings, and you can also continue without them.",
+      "unsupported": "This browser does not support notifications. The suggestions will appear here in the app.",
+      "notConfigured": "Notifications are not set up yet. You can continue, and your choices are saved.",
+      "errorTimeout": "Notifications did not come together this time. You can try again, or continue without them.",
+      "errorSubscribe": "I couldn't turn on notifications on this device. You can try again, or continue without them.",
+      "errorSave": "Notifications were turned on, but I couldn't save that. You can try again, or continue without them.",
+      "ios": {
+        "title": "On iPhone, first add the app to the Home Screen",
+        "step1": "Tap the Share button.",
+        "step2": "Choose “Add to Home Screen”.",
+        "step3": "Tap “Add” and open the app from its icon.",
+        "step4": "Come back here and turn on notifications.",
+        "hint": "You can also continue without notifications for now."
+      }
+    },
+    "ready": {
+      "title": "We're ready.",
+      "line1": "From now on you don't need to do much.",
+      "line2": "Just tell me what's happening,",
+      "line3": "and I'll start learning what helps you.",
+      "cta": "Let's start"
+    },
+    "places": {
+      "jerusalem": "Jerusalem",
+      "tel_aviv": "Tel Aviv",
+      "haifa": "Haifa",
+      "beer_sheva": "Beer Sheva",
+      "eilat": "Eilat",
+      "tiberias": "Tiberias",
+      "petah_tikva": "Petah Tikva",
+      "ashdod": "Ashdod",
+      "zikhron_yaakov": "Zikhron Ya'akov",
+      "netanya": "Netanya",
+      "rishon_lezion": "Rishon LeZion",
+      "ashkelon": "Ashkelon",
+      "rehovot": "Rehovot",
+      "holon": "Holon",
+      "bat_yam": "Bat Yam",
+      "bnei_brak": "Bnei Brak",
+      "ramat_gan": "Ramat Gan",
+      "herzliya": "Herzliya",
+      "raanana": "Ra'anana",
+      "kfar_saba": "Kfar Saba",
+      "rosh_haayin": "Rosh HaAyin",
+      "hadera": "Hadera",
+      "lod": "Lod",
+      "ramla": "Ramla",
+      "modiin": "Modi'in",
+      "beit_shemesh": "Beit Shemesh",
+      "kiryat_gat": "Kiryat Gat",
+      "netivot": "Netivot",
+      "sderot": "Sderot",
+      "dimona": "Dimona",
+      "arad": "Arad",
+      "mitzpe_ramon": "Mitzpe Ramon",
+      "afula": "Afula",
+      "nazareth": "Nazareth",
+      "karmiel": "Karmiel",
+      "akko": "Akko",
+      "nahariya": "Nahariya",
+      "safed": "Safed",
+      "kiryat_shmona": "Kiryat Shmona",
+      "new_york": "New York",
+      "boston": "Boston",
+      "miami": "Miami",
+      "chicago": "Chicago",
+      "los_angeles": "Los Angeles",
+      "toronto": "Toronto",
+      "montreal": "Montreal",
+      "buenos_aires": "Buenos Aires",
+      "sao_paulo": "Sao Paulo",
+      "london": "London",
+      "manchester": "Manchester",
+      "paris": "Paris",
+      "antwerp": "Antwerp",
+      "berlin": "Berlin",
+      "moscow": "Moscow",
+      "johannesburg": "Johannesburg",
+      "sydney": "Sydney",
+      "melbourne": "Melbourne"
+    }
   }
 }

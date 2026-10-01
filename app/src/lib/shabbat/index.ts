@@ -51,13 +51,11 @@ export function defaultCandleLightingMinutes(inIsrael: boolean, cityName?: strin
 
 /** Candle lighting and Havdalah of the next (or current) Shabbat, or null if none is found. */
 export function computeNextShabbat(input: ShabbatInput): ShabbatTimes | null {
-  const location = new Location(
-    input.latitude,
-    input.longitude,
-    input.inIsrael,
-    input.timezone,
-    input.cityName,
-  );
+  // The Location is built with il=false on purpose. Hebcal replaces an explicit 18 minutes by its
+  // own city default when the Location itself is Israeli (calendar.js, overrideIsraelCandleMins),
+  // which would silently ignore the minutes the user confirmed. The Israeli schedule is still
+  // selected through `il` in the calendar() call below, and Havdalah does not depend on it.
+  const location = new Location(input.latitude, input.longitude, false, input.timezone, input.cityName);
 
   // Hebcal reads calendar dates from local Date fields, so build local dates from the
   // calendar day the user is on, not from the UTC instant.

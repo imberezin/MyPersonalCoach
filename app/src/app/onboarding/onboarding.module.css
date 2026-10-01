@@ -1,0 +1,290 @@
+/* Onboarding screens A1-A12. Tokens only (tests/design/tokens.test.ts): text colors are limited to
+   the readable text tokens, and the brand colors are used for backgrounds and borders. Logical
+   properties throughout, so one stylesheet serves Hebrew (RTL) and English (LTR). */
+
+.main {
+  min-block-size: 100dvh;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding-block: var(--space-6) calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  padding-inline: var(--space-4);
+}
+
+.shell {
+  inline-size: min(100%, 30rem);
+}
+
+/* ---- Step content ---- */
+
+/* A quiet entrance; the global prefers-reduced-motion rule shortens it to nothing. */
+.form {
+  display: grid;
+  gap: var(--space-5);
+  animation: stepIn 280ms ease-out both;
+}
+
+@keyframes stepIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-h2);
+}
+
+/* The title takes focus when a step opens (for screen readers); it is not a control, so no ring. */
+.title:focus,
+.title:focus-visible {
+  outline: none;
+}
+
+.lead {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-lg);
+}
+
+.leadStrong {
+  margin: 0;
+  font-size: var(--font-size-h3);
+  font-weight: 600;
+}
+
+.lines {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.lines p {
+  margin: 0;
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+/* A1: the illustration on a rounded cream surface. */
+.banner {
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--color-background);
+}
+
+.banner img {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.welcome {
+  display: grid;
+  gap: var(--space-5);
+  justify-items: center;
+  text-align: center;
+}
+
+.welcome .banner {
+  inline-size: 100%;
+}
+
+.welcome .lines {
+  justify-items: center;
+}
+
+/* ---- Fields ---- */
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.input,
+.select,
+.textarea {
+  inline-size: 100%;
+  min-block-size: var(--tap-target);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+}
+
+.textarea {
+  padding-block: var(--space-3);
+  resize: vertical;
+  line-height: var(--line-height-body);
+}
+
+.numberInput {
+  inline-size: min(100%, 9rem);
+}
+
+.unit {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+}
+
+/* A reply to what was typed marks the field softly, with the Attention color on the border only. */
+.input[aria-invalid="true"],
+.select[aria-invalid="true"],
+.textarea[aria-invalid="true"] {
+  border-color: var(--color-attention);
+}
+
+/* ---- Choices ---- */
+
+.choices {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--tap-target);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+}
+
+.choice:hover {
+  background: var(--color-primary-light);
+}
+
+.choice:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.choice input {
+  flex: none;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  margin: 0;
+  accent-color: var(--color-primary-dark);
+}
+
+/* ---- A9: place and Shabbat times ---- */
+
+.subBlock {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  /* Surface, not cream: the secondary text color is 4.5:1 or better only on surface and background. */
+  background: var(--color-surface);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.preview {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-body);
+}
+
+.previewTime {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-weight: 600;
+}
+
+/* ---- A11: device panel ---- */
+
+.device {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.device h2 {
+  margin: 0;
+  font-size: var(--font-size-h3);
+}
+
+.device p {
+  margin: 0;
+}
+
+.steps {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+/* ---- Actions: Continue first in the DOM, so Enter in a text field always means Continue ---- */
+
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: stretch;
+}
+
+.or {
+  margin: 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.back {
+  justify-self: center;
+}
+
+.unavailable {
+  display: grid;
+  gap: var(--space-4);
+  text-align: center;
+  justify-items: center;
+}

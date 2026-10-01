@@ -15,6 +15,7 @@
     "local:start": "supabase start",
     "local:stop": "supabase stop",
     "local:reset": "supabase db reset",
+    "local:migrate": "supabase migration up --local",
     "local:setup": "node scripts/local-setup.mjs"
   },
   "dependencies": {

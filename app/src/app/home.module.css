@@ -76,3 +76,15 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* On a phone the label above the value leaves room for long values such as the e-mail. */
+@media (max-width: 480px) {
+  .dev dl {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .dev dd {
+    margin-block-end: var(--space-2);
+  }
+}
