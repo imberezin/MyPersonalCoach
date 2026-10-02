@@ -12,7 +12,7 @@ import { loadFirstWeekSummary } from "@/lib/firstWeek/load";
 import { finishFirstWeekAction, snoozeFirstWeekCardAction } from "./actions";
 import { proposeFirstExperimentAction } from "./experiment/actions";
 
-// The route that posts proposeFirstExperimentAction, which may wait up to 9 seconds for the AI after several database
+// The route that posts proposeFirstExperimentAction, which may wait up to 13 seconds for the AI after several database
 // calls. A Server Action takes the timeout of the page that uses it. The same value and the same reason as
 // /api/food/analyze; app/vercel.json has no function config.
 export const maxDuration = 40;

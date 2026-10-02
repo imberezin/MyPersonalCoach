@@ -242,13 +242,20 @@ describe("produceExperimentWording: any failure after the gate falls back to the
     const wordExperiment = vi.spyOn(h.deps.runtime.gateway, "wordExperiment");
     await produceExperimentWording(h.deps, input());
     expect(wordExperiment).toHaveBeenCalledTimes(1);
-    expect(wordExperiment.mock.calls[0][1]).toEqual({ timeoutMs: 8_000, totalBudgetMs: 9_000, retries: 0 });
+    expect(wordExperiment.mock.calls[0][1]).toEqual({ timeoutMs: 12_000, totalBudgetMs: 13_000, retries: 0 });
     // The closed fact shape, nothing else.
     expect(wordExperiment.mock.calls[0][0]).toEqual({
       locale: "he",
       interventionKey: "eat_intentionally",
       variantId: "default",
-      facts: { approved_text: APPROVED.he, scope: "next_meal", max_chars: 140, tone: "calm" },
+      facts: {
+        approved_text: APPROVED.he,
+        scope: "next_meal",
+        max_chars: 140,
+        tone: "calm",
+        // wording-v2: derived from the approved sentence alone, never typed in by a caller.
+        anchors: JSON.stringify({ verbatim: ["כמה דקות", "בלי מסך"], actions: ["בארוחה", "הבאה", "שים", "בצלחת", "וקח"] }),
+      },
     });
   });
 });

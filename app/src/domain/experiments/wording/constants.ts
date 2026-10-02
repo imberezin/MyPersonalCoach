@@ -23,8 +23,14 @@ export const AI_WORDING = {
   minTokenOverlap: 0.5,
   /** Content tokens the reworded text may add (tone words only: a whole extra instruction does not fit). */
   maxNewTokens: 4,
-  attemptTimeoutMs: 8_000,
-  totalBudgetMs: 9_000,
+  /**
+   * Live runs (Gemini flash-lite, 2026-10-02): an answer takes 1 to 5 seconds, and a heavy tail of calls takes longer
+   * (8 of the first 15 hit an 8-second limit, one answer needed 15 seconds). A timeout is not retried (the gateway retries
+   * only an invalid answer), so a shorter limit simply throws the answer away. The offer already exists with the library
+   * text when the call starts, so the wait is the only cost.
+   */
+  attemptTimeoutMs: 12_000,
+  totalBudgetMs: 13_000,
   /** An invalid answer is not retried: the library's text is shown. */
   retries: 0,
 } as const;

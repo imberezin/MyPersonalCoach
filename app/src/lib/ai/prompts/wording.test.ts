@@ -4,8 +4,12 @@ import en from "@/i18n/messages/en.json";
 import he from "@/i18n/messages/he.json";
 import type { InsightContext } from "../types";
 import {
+  ACTION_WORDS_CLOSE,
+  ACTION_WORDS_OPEN,
   APPROVED_TEXT_CLOSE,
   APPROVED_TEXT_OPEN,
+  KEEP_VERBATIM_CLOSE,
+  KEEP_VERBATIM_OPEN,
   WORDING_JSON_SCHEMA,
   WORDING_PROMPT_VERSION,
   WORDING_SYSTEM_PROMPT_HE,
@@ -25,14 +29,19 @@ const context = (over: Partial<InsightContext> = {}, facts: InsightContext["fact
 });
 
 describe("system prompt", () => {
-  it("is versioned wording-v1", () => {
-    expect(WORDING_PROMPT_VERSION).toBe("wording-v1");
-    expect(buildWordingRequest(context()).promptVersion).toBe("wording-v1");
+  it("is versioned wording-v2", () => {
+    expect(WORDING_PROMPT_VERSION).toBe("wording-v2");
+    expect(buildWordingRequest(context()).promptVersion).toBe("wording-v2");
   });
 
-  it("has exactly the six numbered rules and names the two delimiters", () => {
-    for (let n = 1; n <= 6; n++) expect(WORDING_SYSTEM_PROMPT_HE).toMatch(new RegExp(`^${n}\\. `, "m"));
-    expect(WORDING_SYSTEM_PROMPT_HE).not.toMatch(/^7\. /m);
+  it("has exactly the ten numbered rules and names the delimiters", () => {
+    for (let n = 1; n <= 10; n++) expect(WORDING_SYSTEM_PROMPT_HE).toMatch(new RegExp(`^${n}\\. `, "m"));
+    expect(WORDING_SYSTEM_PROMPT_HE).not.toMatch(/^11\. /m);
+    for (const tag of [KEEP_VERBATIM_OPEN, KEEP_VERBATIM_CLOSE, ACTION_WORDS_OPEN, ACTION_WORDS_CLOSE]) {
+      expect(tag).toMatch(/^<\/?[a-z_]+>$/);
+    }
+    expect(WORDING_SYSTEM_PROMPT_HE).toContain(KEEP_VERBATIM_OPEN);
+    expect(WORDING_SYSTEM_PROMPT_HE).toContain(ACTION_WORDS_OPEN);
     expect(APPROVED_TEXT_OPEN).toBe("<approved_text>");
     expect(APPROVED_TEXT_CLOSE).toBe("</approved_text>");
     expect(WORDING_SYSTEM_PROMPT_HE).toContain(APPROVED_TEXT_OPEN);

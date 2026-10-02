@@ -66,14 +66,25 @@ function normalizeText(raw: string): string {
   return raw.normalize("NFC").replace(/[\p{Zs}\t]+/gu, " ").trim();
 }
 
+const WORD_PATTERN = /[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu;
+
 /** Lowercase words (letters and digits, one inner apostrophe allowed), Hebrew points removed. */
 function tokenize(text: string): string[] {
   const plain = text.normalize("NFC").replace(HEBREW_MARKS, "").replace(/[’׳]/g, "'").toLowerCase();
-  return plain.match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu) ?? [];
+  return plain.match(WORD_PATTERN) ?? [];
+}
+
+/**
+ * The same words as `tokenize`, in their original letter case (for showing an anchor phrase to the model).
+ * `tokenizeSurface(x).map(lowercase)` is `tokenize(x)`.
+ */
+export function tokenizeSurface(text: string): string[] {
+  const plain = text.normalize("NFC").replace(HEBREW_MARKS, "").replace(/[’׳]/g, "'");
+  return plain.match(WORD_PATTERN) ?? [];
 }
 
 /** The token itself and, for a Hebrew word, the forms without one or two leading clitic letters (never leaving fewer than two letters). */
-function variants(token: string): string[] {
+export function variants(token: string): string[] {
   const out = [token];
   let rest = token;
   for (let i = 0; i < 2 && rest.length > 2 && HEBREW_CLITICS.includes(rest[0]); i++) {
@@ -132,7 +143,7 @@ function unitsOf(tokens: readonly string[]): Set<string> {
 }
 
 /** The canonical negator a token is, or null: whole token, after dropping a leading ו and/or ש; an English "...n't" counts as one. */
-function negatorOf(token: string, known: ReadonlySet<string>): string | null {
+export function negatorOf(token: string, known: ReadonlySet<string>): string | null {
   if (known.has(token)) return token;
   if (NEGATIVE_CONTRACTION.test(token)) return token;
   let rest = token;
@@ -155,10 +166,10 @@ function negatorsOf(tokens: readonly string[]): Set<string> {
 }
 
 /** How far after a negator its object may sit ("without a screen": the object is two tokens on). */
-const NEGATOR_REACH = 3;
+export const NEGATOR_REACH = 3;
 
 /** The canonical form `contentTokens` uses for one token, or null when the token is too short to count. */
-function canonicalContent(token: string): string | null {
+export function canonicalContent(token: string): string | null {
   const canonical = token.length > 3 && HEBREW_CLITICS.includes(token[0]) ? token.slice(1) : token;
   return canonical.length >= 3 ? canonical : null;
 }

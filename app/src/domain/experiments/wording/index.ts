@@ -20,3 +20,4 @@ export {
   copyLintHits,
 } from "./lint";
 export { WORDING_CHECKS, measureWording, validateWording, type WordingCheck, type WordingVerdict } from "./validate";
+export { MAX_ACTION_ANCHORS, MAX_VERBATIM_ANCHORS, extractWordingAnchors, wordingAnchorsFact, type WordingAnchors } from "./anchors";

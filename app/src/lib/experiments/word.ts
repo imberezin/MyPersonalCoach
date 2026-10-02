@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { wordingAnchorsFact } from "@/domain/experiments/wording/anchors";
 import { AI_WORDING } from "@/domain/experiments/wording/constants";
 import {
   decideWordingGate,
@@ -83,7 +84,14 @@ export async function produceExperimentWording(deps: WordingDeps, input: Wording
       locale: input.locale,
       interventionKey: input.offer.key,
       variantId: input.offer.variantId,
-      facts: { approved_text: input.approvedText, scope: input.offer.scope, max_chars: AI_WORDING.maxChars[input.locale], tone: "calm" },
+      facts: {
+        approved_text: input.approvedText,
+        scope: input.offer.scope,
+        max_chars: AI_WORDING.maxChars[input.locale],
+        tone: "calm",
+        // Derived from the approved sentence alone (wording-v2); assertWordingFacts re-derives and compares.
+        anchors: wordingAnchorsFact(input.approvedText),
+      },
     };
     // A malformed request is a programming error: refuse it here, before a provider attempt is made and recorded.
     assertWordingFacts(context);
