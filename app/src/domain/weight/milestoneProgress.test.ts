@@ -102,6 +102,13 @@ describe("milestoneProgress: when a step is reached", () => {
     expect(list(p)[2]).toMatchObject({ reachedWeekStart: weekKey(1), confirmedWeekStart: weekKey(2) });
   });
 
+  it("does not call the goal reached when only a landmark in the middle is (goalReached is the LAST step, not any step after the start)", () => {
+    const p = progressOf(weeks([114, 113]), { startKg: 120, goalKg: 99 });
+    expect(states(p)).toEqual(["REACHED", "REACHED", "NEXT", "AHEAD", "AHEAD"]);
+    expect(list(p)[4]).toMatchObject({ kind: "GOAL", state: "AHEAD" });
+    expect(p).toMatchObject({ goalReached: false });
+  });
+
   it("reads ALL the points, not a window of them", () => {
     const old = weeks([79, 74.9, 74.8]);
     const later = Array.from({ length: 60 }, (_, i) => point(3 + i, 81));
