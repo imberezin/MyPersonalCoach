@@ -13,3 +13,13 @@ export function isValidCronRequest(request: Request, secret: string | undefined 
 
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
+
+/**
+ * The check every cron route starts with: 503 when no secret is configured, 401 when the bearer is wrong,
+ * otherwise null (go ahead). Returns the response to send, so a route cannot forget a status code.
+ */
+export function guardCronRequest(request: Request, secret: string | undefined = process.env.CRON_SECRET): Response | null {
+  if (!secret) return Response.json({ error: "cron_not_configured" }, { status: 503 });
+  if (!isValidCronRequest(request, secret)) return Response.json({ error: "unauthorized" }, { status: 401 });
+  return null;
+}

@@ -12,7 +12,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Jobs (added as they are built): evaluate the engine per user, generate the next
-  // Shabbat offline periods, close the week, remove stale temporary photos.
+  // Jobs (added as they are built): evaluate the engine per user, close the week, remove
+  // stale temporary photos. The upcoming Shabbat periods have their own route and schedule:
+  // /api/engine/shabbat-topup.
   return Response.json({ ok: true, ranAt: new Date().toISOString(), jobs: [] });
 }

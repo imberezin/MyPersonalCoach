@@ -150,6 +150,83 @@ curl.exe -X POST https://YOUR-APP.vercel.app/api/engine/tick -H "Authorization: 
 
 התשובה הצפויה: `{"ok":true,...}`. בלי ה-header התשובה היא 401.
 
+## 6ב. תזמון: שבתות עתידיות (ראשון ורביעי)
+
+ה-Onboarding כותב 8 שבתות קדימה. הנתיב `/api/engine/shabbat-topup` מוסיף את החסרות לכל משתמש שמקיים שבת (לפי המקום שלו), כך שתמיד יש 8 קדימה. בלעדיו Home מפסיק לזהות שבת בערך ב-2026-11-26. הוא רק מוסיף שורות `SHABBAT` מסוג `auto` שמתחילות בעתיד; הוא לא נוגע בדיווחים, בשורות ידניות, בשורות עבר או בנתונים אישיים אחרים, והתשובה והלוגים שלו כוללים מספרים בלבד.
+
+הסדר, וכל שלב במארח באישורך:
+
+1. האתר ב-Vercel כבר כולל את הנתיב (מהקוד הזה), עם אותו `CRON_SECRET`.
+2. ב-SQL Editor מריצים את הקובץ `app/supabase/migrations/20261002120000_shabbat_topup.sql` פעם אחת (פונקציה אחת, לא נוגע בשום טבלה). בודקים שהיא סגורה לכולם חוץ מ-`service_role`:
+
+```sql
+select p.prosecdef as security_definer,
+       has_function_privilege('anon', p.oid, 'execute') as anon,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role
+  from pg_proc p where p.oid = 'public.top_up_future_auto_shabbat(uuid, text, integer, jsonb)'::regprocedure;
+```
+
+   התוצאה הצפויה: `false | false | false | true`.
+
+3. קריאת בדיקה בלי כתיבה (dry-run). בחשבון שלך היום צפוי `"ok":true` עם `"candidates":1`, ו-`current` או שורה אחת מתוכננת (`rowsPlanned`):
+
+```powershell
+curl.exe -X POST "https://YOUR-APP.vercel.app/api/engine/shabbat-topup?dryRun=1" -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+   אם יש `skippedBy.stale_rows` (תשובה 500 ו-`"ok":false`), הנתונים השמורים חושבו למקום או לדקות אחרים מהפרופיל: עוצרים ובודקים לפני הריצה האמיתית. הנתיב לא מתקן שורות כאלה (שמירה מחדש של המקום ב-Onboarding מתקנת אותן).
+
+4. אם התוצאה תקינה, אותה קריאה בלי `?dryRun=1` (ריצה אמיתית; צפוי `current` או שורה אחת שנוספה).
+5. תזמון. את שם הסוד ב-Vault קח מהפקודה של `engine-tick` (התוצאה מכילה את השם, לא את הערך):
+
+```sql
+select command from cron.job where jobname = 'engine-tick';
+```
+
+```sql
+-- ראשון ורביעי ב-06:00 UTC. הג'וב אידמפוטנטי, ולכן הניסיון השני בשבוע בחינם.
+-- שבת שעדיין מתנהלת לא נוספת אף פעם, ולכן השעה המדויקת לא חשובה.
+select cron.schedule('shabbat-topup', '0 6 * * 0,3', $$
+  select net.http_post(
+    url := 'https://YOUR-APP.vercel.app/api/engine/shabbat-topup',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'THE_SAME_NAME_AS_ENGINE_TICK'),
+      'Content-Type', 'application/json'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+$$);
+
+select jobname, schedule, active from cron.job where jobname in ('engine-tick', 'shabbat-topup');
+```
+
+   `timeout_milliseconds` מפורש כי ברירת המחדל של pg_net (5 שניות) מסמנת ריצה איטית ככישלון גם כשהשרת סיים.
+
+### בדיקת בריאות (הסימן העיקרי)
+
+פעם אחרי ראשון ורביעי הראשונים, ואז ב-1 בכל חודש (וגם אחרי כל פריסה שנוגעת בנתיב), ב-SQL Editor:
+
+```sql
+-- תקין: under_6_weeks = 0. מעל 0 פירושו שריצה אחת לפחות לא עבדה; מתחת ל-3 שבועות כיסוי, לפעול באותו יום.
+select count(*) as observing_users,
+       count(*) filter (where covered_until is null or covered_until < now() + interval '6 weeks') as under_6_weeks,
+       min(covered_until) as least_covered_until
+  from (select p.user_id,
+               (select max(o.end_at) from public.offline_periods o
+                 where o.user_id = p.user_id and o.type = 'SHABBAT' and o.source = 'auto' and o.end_at > now()) as covered_until
+          from public.profiles p where p.observes_shabbat is true) s;
+```
+
+בריצה שבועית תקינה `least_covered_until` נשאר כ-7 עד 8 שבועות קדימה; שבוע חג יכול לגרוע בערך שבוע, ולכן הסף הוא 6. אם `under_6_weeks` מעל 0, מריצים את קריאת ה-dry-run שבשלב 3 ובודקים מה כתוב בגוף התשובה: 200 תקין; 500 או 503 מראים בספירות מה השתבש (`failed`, `aborted`, `skippedBy`).
+
+התוצאה של `net._http_response` נמחקת אחרי `pg_net.ttl` (ברירת מחדל 6 שעות, `show pg_net.ttl;`) ו-`cron.job_run_details` מראה רק שהקריאה נשלחה, לכן שתיהן טובות רק בשעות שאחרי ריצה:
+
+```sql
+select status, start_time from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'shabbat-topup') order by start_time desc limit 3;
+select status_code, created from net._http_response order by created desc limit 3;
+```
+
 ## 7. בדיקה מול Supabase מקומי
 
 נעשה, ראה סעיף 1ב: `npm run local:start` מפעיל את הסביבה המלאה של Supabase בתוך Docker (ה-`init` כבר בוצע, והתצורה ב-`app/supabase/config.toml`). ה-RLS נבדק גם על PGlite (`npm test`) וגם על תמונת Supabase האמיתית.

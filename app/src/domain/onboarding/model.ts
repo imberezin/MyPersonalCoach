@@ -95,7 +95,7 @@ export const RANGES = {
 /** Counted in code points, not UTF-16 units, so an emoji is one character. */
 export const TEXT_LIMITS = { food: 300, motivation: 1000 } as const;
 
-/** How many upcoming Shabbat periods are stored. Bridges the weekly job that does not exist yet. */
+/** Upcoming Shabbat rows kept ahead: onboarding writes this many and the weekly top-up restores it. */
 export const SHABBAT_HORIZON_WEEKS = 8;
 
 /** The numeric range behind a form field, or null when the field is not a bounded number. */
