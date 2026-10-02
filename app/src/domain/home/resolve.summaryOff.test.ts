@@ -16,7 +16,7 @@ const MIDDAY = "2027-01-12T10:00:00Z"; // 12:00 local
 // The counts say SUMMARY_READY (10 meals on 8 days) and also "3 available days without a meal".
 const READY_AND_AWAY: FirstWeekProgress = { availableDays: 8, confirmedMeals: 10, availableDaysSinceLastMeal: 3 };
 const DAY_15_AND_AWAY: FirstWeekProgress = { availableDays: 15, confirmedMeals: 4, availableDaysSinceLastMeal: 3 };
-const READY_NOT_AWAY: FirstWeekProgress = { availableDays: 15, confirmedMeals: 0, availableDaysSinceLastMeal: null };
+const READY_NOT_AWAY: FirstWeekProgress = { availableDays: 15, confirmedMeals: 1, availableDaysSinceLastMeal: 0 };
 
 function facts(overrides: Partial<HomeFacts> = {}): HomeFacts {
   return {
@@ -29,6 +29,7 @@ function facts(overrides: Partial<HomeFacts> = {}): HomeFacts {
     firstWeekSnoozed: NOT_SNOOZED,
     earlySignal: null,
     quietHours: null,
+    milestone: null,
     ...overrides,
   };
 }

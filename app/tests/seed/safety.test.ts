@@ -76,12 +76,15 @@ describe("the database code touches only the demo user's own tables", () => {
 
   it("reads and writes only these tables", () => {
     const tables = new Set([...db.matchAll(/\.from\("(\w+)"\)/g)].map((m) => m[1]));
-    expect([...tables].sort()).toEqual(["meal_entries", "offline_periods", "pattern_evidence", "profiles", "user_preferences"]);
+    // `events` is only read (the --explain lines look for the thanked landmarks); weight_entries is written as the demo user.
+    expect([...tables].sort()).toEqual(["events", "meal_entries", "offline_periods", "pattern_evidence", "profiles", "user_preferences", "weight_entries"]);
+    const events = [...db.matchAll(/\.from\("events"\)\s*\.(\w+)\(/g)].map((m) => m[1]);
+    expect(events).toEqual(["select"]);
   });
 
-  it("deletes only meals (through RLS) and, with the stack's own admin key, the one guarded user", () => {
+  it("deletes only meals and weights (through RLS) and, with the stack's own admin key, the one guarded user", () => {
     const deletes = [...db.matchAll(/\.from\("(\w+)"\)\s*\.delete\(/g)].map((m) => m[1]);
-    expect(deletes).toEqual(["meal_entries", "meal_entries"]);
+    expect(deletes).toEqual(["meal_entries", "meal_entries", "weight_entries", "weight_entries"]);
     expect([...db.matchAll(/auth\.admin\.(\w+)/g)].map((m) => m[1]).sort()).toEqual(["createUser", "deleteUser", "listUsers"]);
     // The admin key is read in one function and only when a user is created or deleted.
     expect([...db.matchAll(/adminKeyOf\(/g)]).toHaveLength(2); // its definition and its single call

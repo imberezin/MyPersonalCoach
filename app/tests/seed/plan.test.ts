@@ -54,14 +54,18 @@ function decide(plan: SeedPlan, o: SeedOptions) {
     firstWeekSnoozed: { ...NOT_SNOOZED },
     earlySignal,
     quietHours: DEFAULT_QUIET,
+    milestone: null,
   });
   return { progress, step, occurrences, view, gate, home, periods };
 }
 
 // The expected values of 16.5, one row per preset. The blueprint's table is the spec; the plan must reproduce it
 // through the domain functions the app itself uses.
+// (The weight presets are checked in tests/seed/weights.test.ts: they have no meals.)
+type MealScenario = Exclude<SeedScenario, `w-${string}`>;
+const MEAL_SCENARIOS = SEED_SCENARIOS.filter((s): s is MealScenario => !s.startsWith("w-"));
 const EXPECTED: Record<
-  SeedScenario,
+  MealScenario,
   {
     availableDays: number;
     meals: number;
@@ -84,7 +88,7 @@ const EXPECTED: Record<
 };
 
 describe("presets verify themselves against the domain (16.5)", () => {
-  it.each(SEED_SCENARIOS)("%s", (scenario) => {
+  it.each(MEAL_SCENARIOS)("%s", (scenario) => {
     const o = options({ scenario });
     const plan = planFor(o);
     const d = decide(plan, o);

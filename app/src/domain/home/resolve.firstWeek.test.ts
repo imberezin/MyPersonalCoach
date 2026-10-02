@@ -17,6 +17,8 @@ const WINTER_SHABBAT: OfflinePeriod = {
 const MIDDAY = "2027-01-12T10:00:00Z";
 
 const KEEP_GOING: FirstWeekProgress = { availableDays: 2, confirmedMeals: 3, availableDaysSinceLastMeal: 0 };
+// During FIRST_WEEK the first-report invitation keys on confirmed meals, so a fixture with no report at all has none.
+const NO_MEALS_YET: FirstWeekProgress = { availableDays: 2, confirmedMeals: 0, availableDaysSinceLastMeal: null };
 const READY_ENOUGH: FirstWeekProgress = { availableDays: 5, confirmedMeals: 10, availableDaysSinceLastMeal: 0 };
 const READY_LITTLE: FirstWeekProgress = { availableDays: 15, confirmedMeals: 4, availableDaysSinceLastMeal: 1 };
 const READY_NO_MEALS: FirstWeekProgress = { availableDays: 15, confirmedMeals: 0, availableDaysSinceLastMeal: null };
@@ -29,10 +31,11 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     offlinePeriods: [WINTER_SHABBAT],
     hasAnyReport: true,
     lifecycle: "FIRST_WEEK",
-    firstWeek: KEEP_GOING,
+    firstWeek: overrides.hasAnyReport === false ? NO_MEALS_YET : KEEP_GOING,
     firstWeekSnoozed: NOT_SNOOZED,
     earlySignal: null,
     quietHours: null,
+    milestone: null,
     ...overrides,
   };
 }

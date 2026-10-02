@@ -349,12 +349,76 @@
       "lead": "When it suits you, tell me about one small thing. That is enough for a start.",
       "cta": "To the first report"
     },
-    "degraded": "Some information did not load just now, and that is fine. Tap \"Home\" to try again."
+    "degraded": "Some information did not load just now, and that is fine. Tap \"Home\" to try again.",
+    "milestoneReached": {
+      "title": "You reached a landmark",
+      "body": "Your weekly average has come to a point we marked at the start. When it suits you, you can take a look at the picture."
+    },
+    "milestoneGoalReached": {
+      "title": "You reached the weight you aimed for",
+      "body": "This is a road you walked, week after week. You can look at it whenever it suits you, and then we keep seeing together what works for you."
+    },
+    "milestoneCta": "To my progress",
+    "milestoneAck": "Thanks"
   },
   "progress": {
     "title": "Progress",
-    "lead": "What changes for you over time will appear here.",
-    "body": "There is not enough information to show anything yet, and that is fine. After a few reports we will start to see together what changes."
+    "lead": "What has changed for you over time, at your own pace.",
+    "body": "There is not enough information to show anything yet, and that is fine. After a few reports we will start to see together what changes.",
+    "weight": {
+      "title": "Weight",
+      "none": "You can report a weight once a week, when it suits you. From the weigh-ins we will see a trend, not the ups and downs of a single day.",
+      "startOnly": "Your starting point is saved. After a few weekly weigh-ins, a trend line will appear here.",
+      "notEnough": "One weigh-in is saved. When there are a few more, a trend line will appear here.",
+      "direction": {
+        "down": "The weekly average went down a little over the last weeks, and we look at the direction over time.",
+        "steady": "The weekly average stayed about where it was over the last weeks, and we look at the direction over time.",
+        "up": "The weekly average went up a little over the last weeks, and we look at the direction over time.",
+        "unknown": "It is still too early to say where this is heading, and I do not want to guess.",
+        "stale": "A little time has passed since the last weigh-in. You can come back to it whenever it suits you."
+      },
+      "plateau": "Periods like this happen to everyone. We will keep looking at the whole picture, not only the number.",
+      "sinceStart": {
+        "lower": "Compared with the start: {kg} kg lower.",
+        "same": "About the same as the start.",
+        "higher": "Compared with the start: {kg} kg higher."
+      },
+      "chart": {
+        "title": "The weekly average",
+        "desc": "The weekly average, from {from} to {to} kg.",
+        "start": "Start"
+      },
+      "numbers": {
+        "summary": "Show the numbers",
+        "week": "Week starting {date}: {kg} kg",
+        "start": "The start: {kg} kg"
+      },
+      "add": "To report a weight",
+      "list": "My weights",
+      "unavailable": "I couldn't load your weight just now, and that's fine. You can try again in a moment."
+    },
+    "milestones": {
+      "title": "Landmarks",
+      "lead": "Landmarks along the way, not tests. Each one is just a place worth pausing at for a moment.",
+      "listLabel": "The landmarks",
+      "item": {
+        "start": "The start",
+        "goal": "The goal",
+        "reached": "Reached",
+        "next": "Next on the way",
+        "kg": "{kg} kg"
+      },
+      "goalReached": "You reached the weight you aimed for."
+    },
+    "noticed": {
+      "title": "What we noticed",
+      "lateEvening": "On a few evenings you reported a meal late in the evening. We will keep checking whether it repeats, with no rush to draw conclusions.",
+      "experiment": "The small experiment you chose:"
+    },
+    "unavailable": {
+      "title": "I couldn't load this just now",
+      "body": "That's fine. You can try again in a moment."
+    }
   },
   "coach": {
     "title": "Coach",
@@ -365,7 +429,9 @@
     "title": "Me",
     "body": "Settings and personal details will be added here later.",
     "mealsLink": "My meals",
-    "mealsHint": "What you've saved, and a way to delete a meal."
+    "mealsHint": "What you've saved, and a way to delete a meal.",
+    "weightsLink": "My weights",
+    "weightsHint": "What you've saved, and a way to fix or delete an entry."
   },
   "meals": {
     "meta": {
@@ -405,6 +471,88 @@
     },
     "more": "Show more",
     "capNote": "Showing your most recent meals."
+  },
+  "weight": {
+    "meta": {
+      "title": "Weight report"
+    },
+    "entry": {
+      "title": "What is your weight?",
+      "lead": "Once a week is enough. There is no need to weigh yourself every day."
+    },
+    "form": {
+      "weightLabel": "Weight",
+      "unit": "kg",
+      "dayLabel": "When?",
+      "dayNow": "Now",
+      "dayKeep": "As saved",
+      "dayYesterday": "Yesterday",
+      "noteLabel": "A short note (optional)",
+      "saving": "Saving..."
+    },
+    "check": {
+      "body": "That number is quite far from your previous weigh-in. Could you check that it is right?",
+      "confirm": "Yes, it is right",
+      "fix": "I'll fix it"
+    },
+    "errors": {
+      "required": "You can write your weight here.",
+      "invalid_number": "You can write a number, with a dot or a comma for the fraction.",
+      "out_of_range": "You can write a weight between {min} and {max} kg.",
+      "note_too_long": "The note is too long. You can shorten it.",
+      "invalid_day": "You can choose a day from the list.",
+      "not_saved": "I couldn't save right now. What you entered is still here, and you can try again."
+    },
+    "edit": {
+      "title": "Edit weight",
+      "lead": "You can fix the number, the day or the note.",
+      "back": "Back to the list"
+    },
+    "saved": {
+      "title": "Saved",
+      "body": "The weight was added.",
+      "edited": "The weight was updated.",
+      "note": "Got it. Once a week is enough, and the trend becomes clear slowly.",
+      "progress": "To my progress",
+      "edit": "Edit",
+      "back": "Back"
+    },
+    "list": {
+      "title": "My weights",
+      "lead": "What you saved. You can fix or delete any row.",
+      "label": "The list of weights",
+      "more": "Show older",
+      "newest": "Back to the newest",
+      "back": "Back",
+      "add": "To report a weight",
+      "start": "Where we started"
+    },
+    "row": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteThis": "Delete this weight"
+    },
+    "confirm": {
+      "title": "Delete this weight?",
+      "body": "It will be removed from your account and this can't be undone. The weekly average will be worked out again without it.",
+      "keep": "Keep it",
+      "delete": "Delete the weight",
+      "deleting": "Deleting..."
+    },
+    "notice": {
+      "deleted": "The weight was deleted.",
+      "gone": "That weight was already gone.",
+      "error": "I couldn't confirm the delete right now. You can check the list and try again."
+    },
+    "empty": {
+      "title": "No weight saved yet",
+      "body": "When one is saved, it will appear here. You can report whenever it suits you."
+    },
+    "unavailable": {
+      "title": "I couldn't load your weights",
+      "body": "That's okay. You can try again in a moment.",
+      "retry": "Try again"
+    }
   },
   "firstWeek": {
     "meta": {

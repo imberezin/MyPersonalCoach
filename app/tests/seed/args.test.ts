@@ -54,6 +54,18 @@ describe("defaults", () => {
       goals: ["improve_eating", "understand_overeating"],
       motivation: DEFAULT_MOTIVATION,
       explainDailyCap: 40,
+      dropWeights: null,
+      lifecycle: "first_week",
+      startWeightKg: 80,
+      goalWeightKg: 72,
+      weights: "none",
+      weightSeries: null,
+      weighDay: 5,
+      weighTime: "08:00",
+      weightDrift: -0.1,
+      weightNoise: 0.6,
+      junkWeights: false,
+      junkDay: 30,
     });
   });
 
@@ -237,7 +249,20 @@ describe("--reset and --fresh", () => {
 });
 
 describe("presets (16.5): each fills its documented defaults, and explicit flags win", () => {
+  // The weight presets (15.3): weight only, the First Week is over, days = 3 mod 7 so the clock is a Wednesday.
+  const W = { mealsPerDay: 0, lateDays: [], gapDays: [], doubleLateDays: [], aggregatedSaturdayNight: false, totalMeals: null, lifecycle: "weekly_cycle", startWeightKg: 80, goalWeightKg: 72, junkWeights: false } as const;
+  const DOWN = { ...W, days: 45, weights: "weekly", weightSeries: [79.6, 78.9, 78.1, 77.4, 76.9, 76.2] } as const;
   const EXPECTED = {
+    "w-none": { ...W, days: 24, weights: "none", weightSeries: null },
+    "w-one": { ...W, days: 10, weights: "weekly", weightSeries: [79.5] },
+    "w-down": DOWN,
+    "w-milestone": { ...W, days: 45, weights: "weekly", weightSeries: [80.4, 79.6, 78.2, 77.0, 74.9, 74.6] },
+    "w-goal": { ...W, days: 52, weights: "weekly", weightSeries: [79.0, 77.0, 74.8, 74.0, 72.6, 71.9, 71.6] },
+    "w-steady": { ...W, days: 38, weights: "weekly", weightSeries: [78.2, 78.1, 78.3, 78.2, 78.1] },
+    "w-rising": { ...W, days: 31, startWeightKg: 76, weights: "weekly", weightSeries: [76.4, 76.9, 77.5, 78.2] },
+    "w-daily": { ...W, days: 31, weights: "daily", weightSeries: null },
+    "w-junk": { ...DOWN, junkWeights: true },
+    "w-nogoal": { ...DOWN, goalWeightKg: null },
     "day1-empty": { days: 1, mealsPerDay: 0, lateDays: [], gapDays: [], doubleLateDays: [], aggregatedSaturdayNight: false, totalMeals: null },
     day3: { days: 3, mealsPerDay: 3, lateDays: [2, 3], gapDays: [], doubleLateDays: [], aggregatedSaturdayNight: null, totalMeals: null },
     "day4-candidate": { days: 4, mealsPerDay: 3, lateDays: [2, 3, 4], gapDays: [], doubleLateDays: [4], aggregatedSaturdayNight: null, totalMeals: null },

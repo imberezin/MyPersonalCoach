@@ -29,8 +29,8 @@ describe("track", () => {
     await expect(track(new NoopSink(), "meal_saved", { note: longText })).rejects.toThrow(/content/);
   });
 
-  it("knows the 24 agreed events", () => {
-    expect(ANALYTICS_EVENTS).toHaveLength(24);
+  it("knows the 27 agreed events", () => {
+    expect(ANALYTICS_EVENTS).toHaveLength(27);
     expect(ANALYTICS_EVENTS).toContain("meal_deleted");
   });
 
@@ -44,6 +44,13 @@ describe("track", () => {
       "experiment_wording_fallback",
       "experiment_started",
     ]) {
+      expect(ANALYTICS_EVENTS, name).toContain(name);
+    }
+    expect(new Set(ANALYTICS_EVENTS).size).toBe(ANALYTICS_EVENTS.length);
+  });
+
+  it("has the three weight events (weight_reported was already there)", () => {
+    for (const name of ["weight_reported", "weight_edited", "weight_deleted", "milestone_acknowledged"]) {
       expect(ANALYTICS_EVENTS, name).toContain(name);
     }
     expect(new Set(ANALYTICS_EVENTS).size).toBe(ANALYTICS_EVENTS.length);

@@ -17,6 +17,7 @@ const copy = (over: Partial<HomeCopy> = {}): HomeCopy => ({
   body: "A sentence.",
   invitation: null,
   earlySignal: null,
+  milestone: null,
   degradedNote: null,
   ...over,
 });

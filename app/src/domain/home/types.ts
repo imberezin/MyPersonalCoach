@@ -4,6 +4,7 @@ import type { OfflinePeriod, OfflineType } from "../offline";
 import type { EarlySignalDecision } from "../patterns/earlySignal";
 import type { PatternKind } from "../patterns/types";
 import type { QuietHours } from "../quietHours";
+import type { MilestoneMoment } from "../weight/milestoneProgress";
 
 /**
  * Home: the one calm thing the first screen says right now. This file is the vocabulary (facts in,
@@ -48,6 +49,8 @@ export interface HomeFacts {
   earlySignal: EarlySignalDecision | null;
   /** The person's quiet hours. Read ONLY when earlySignal.due; null = not read or unknown, and then there is no Early Signal card (better silent than intrusive). */
   quietHours: QuietHours | null;
+  /** The landmark achievement Home may show now (derived from the weekly weight averages; carries no number). null = none, or unknown: an unknown read is never a celebration. */
+  milestone: MilestoneMoment | null;
 }
 
 export type HomeState =
@@ -63,6 +66,8 @@ export type HomeState =
   | { key: "FIRST_WEEK_WELCOME_BACK" }
   /** B4: a small optional question about what was noticed. Its three answers are its exits. */
   | { key: "EARLY_SIGNAL"; signal: PatternKind }
+  /** A landmark on the way to the goal was confirmed by two completed weekly averages. `week` is the confirming week's date key; `isGoal` picks the wording. Ended by "Thanks" or after its window. Carries no number. */
+  | { key: "MILESTONE_REACHED"; week: string; isGoal: boolean }
   | { key: "SILENCE"; reason: "NOTHING_TO_SAY" }
   | { key: "SILENCE"; reason: "OFFLINE_PERIOD"; periodType: OfflineType };
 export type HomeStateKey = HomeState["key"];
@@ -71,7 +76,8 @@ export type HomeStateKey = HomeState["key"];
 export type HomeAction =
   | { kind: "OPEN_REPORT_SHEET"; reason: "FIRST_REPORT" | "WELCOME_BACK" }
   | { kind: "OPEN_FIRST_WEEK_SUMMARY" }
-  | { kind: "ANSWER_EARLY_SIGNAL" };
+  | { kind: "ANSWER_EARLY_SIGNAL" }
+  | { kind: "OPEN_PROGRESS"; week: string };
 
 export interface HomeDecision {
   state: HomeState;
@@ -94,5 +100,7 @@ export const HOME_COPY_KEYS = [
   "firstWeekSummaryReadyLittle",
   "firstWeekWelcomeBack",
   "earlySignalLateEvening",
+  "milestoneReached",
+  "milestoneGoalReached",
 ] as const;
 export type HomeCopyKey = (typeof HOME_COPY_KEYS)[number];

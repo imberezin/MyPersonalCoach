@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SHELL_MESSAGE_KEYS } from "./messageKeys";
 import { FOOD_ROUTES } from "@/domain/food/routes";
+import { WEIGHT_ROUTES } from "@/domain/weight/routes";
 import { REPORT_OPTIONS } from "./reportOptions";
 
 describe("REPORT_OPTIONS", () => {
@@ -33,7 +34,7 @@ describe("REPORT_OPTIONS", () => {
     expect(REPORT_OPTIONS.some((option) => option.emoji.includes("🎙"))).toBe(false);
   });
 
-  it("links food, photo and writing to the food flow, and leaves the other four inactive", () => {
+  it("links food, weight, photo and writing, and leaves activity, sleep and feeling inactive", () => {
     for (const option of REPORT_OPTIONS) {
       expect(option.href === null || option.href.startsWith("/"), option.id).toBe(true);
     }
@@ -41,7 +42,7 @@ describe("REPORT_OPTIONS", () => {
     expect(hrefs).toEqual({
       food: FOOD_ROUTES.chooser,
       activity: null,
-      weight: null,
+      weight: WEIGHT_ROUTES.entry,
       sleep: null,
       feeling: null,
       photo: FOOD_ROUTES.photo,

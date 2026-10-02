@@ -13,7 +13,9 @@ import { resolveHome, type HomeFacts, type HomeState } from "./index";
 
 const TZ = "Asia/Jerusalem";
 const MIDDAY = "2027-01-12T10:00:00Z"; // 12:00 local
-const READY: FirstWeekProgress = { availableDays: 15, confirmedMeals: 0, availableDaysSinceLastMeal: null };
+const READY: FirstWeekProgress = { availableDays: 15, confirmedMeals: 1, availableDaysSinceLastMeal: 0 };
+// No confirmed meal: during FIRST_WEEK this is what keeps the first-report invitation up.
+const READY_NO_MEALS: FirstWeekProgress = { availableDays: 15, confirmedMeals: 0, availableDaysSinceLastMeal: null };
 const WELCOME_BACK: FirstWeekProgress = { availableDays: 3, confirmedMeals: 4, availableDaysSinceLastMeal: 3 };
 
 function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
@@ -27,6 +29,7 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     firstWeekSnoozed: NOT_SNOOZED,
     earlySignal: null,
     quietHours: null,
+    milestone: null,
     ...overrides,
   };
 }
@@ -48,7 +51,7 @@ describe("resolveHome with the First Week switches off", () => {
   });
 
   it("does not suppress First Week Start by a ready summary (the summary does not exist)", () => {
-    const decision = resolveHome(facts(MIDDAY, { hasAnyReport: false }));
+    const decision = resolveHome(facts(MIDDAY, { hasAnyReport: false, firstWeek: READY_NO_MEALS }));
     expect(decision.state).toEqual({ key: "FIRST_WEEK_START" });
     expect(decision.action).toEqual({ kind: "OPEN_REPORT_SHEET", reason: "FIRST_REPORT" });
   });

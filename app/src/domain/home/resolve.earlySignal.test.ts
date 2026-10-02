@@ -22,6 +22,8 @@ const NO_QUIET: QuietHours = { kind: "NONE" };
 const DEFAULT_QUIET: QuietHours = { kind: "WINDOW", startMinute: 0, endMinute: 480 }; // 00:00 to 08:00
 
 const KEEP_GOING: FirstWeekProgress = { availableDays: 2, confirmedMeals: 3, availableDaysSinceLastMeal: 0 };
+// During FIRST_WEEK the first-report invitation keys on confirmed meals, so a fixture with no report at all has none.
+const NO_MEALS_YET: FirstWeekProgress = { availableDays: 2, confirmedMeals: 0, availableDaysSinceLastMeal: null };
 const READY: FirstWeekProgress = { availableDays: 5, confirmedMeals: 10, availableDaysSinceLastMeal: 0 };
 const WELCOME_BACK: FirstWeekProgress = { availableDays: 3, confirmedMeals: 4, availableDaysSinceLastMeal: 3 };
 
@@ -38,10 +40,11 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     offlinePeriods: [WINTER_SHABBAT],
     hasAnyReport: true,
     lifecycle: "FIRST_WEEK",
-    firstWeek: KEEP_GOING,
+    firstWeek: overrides.hasAnyReport === false ? NO_MEALS_YET : KEEP_GOING,
     firstWeekSnoozed: NOT_SNOOZED,
     earlySignal: DUE,
     quietHours: NO_QUIET,
+    milestone: null,
     ...overrides,
   };
 }

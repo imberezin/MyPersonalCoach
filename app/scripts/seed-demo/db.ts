@@ -5,16 +5,19 @@ import { selectFirstExperiment, type PatternFact } from "@/domain/experiments";
 import { decideFirstWeekStep } from "@/domain/firstWeekFlow";
 import { resolveHome } from "@/domain/home";
 import { ONBOARDING_ROW_COLUMNS, normalizeRow } from "@/domain/onboarding";
+import { isOffline } from "@/domain/offline";
 import { LATE_EVENING, decideEarlySignal } from "@/domain/patterns";
 import { resolveTimeZone } from "@/domain/time";
+import { MILESTONE_MOMENT, buildWeightTrend, milestoneProgress, parseDayKey, weeklyPoints } from "@/domain/weight";
 import { DEV_CLOCK_FILE } from "@/lib/clock/now";
 import { loadExperiments } from "@/lib/experiments/repo";
 import { loadHomeFacts } from "@/lib/home/load";
 import type { OnboardingContext } from "@/lib/onboarding/context";
 import { loadLateEveningSignal, loadQuietHours } from "@/lib/patterns/load";
+import { loadReferenceWeight, loadWeightSeries } from "@/lib/weight/repo";
 import { readClockFile, removeClockFile, writeClockFile } from "./clockfile";
-import { describeExcluded, type ExplainFacts } from "./explain";
-import type { DbSession, MealRow, SeedDeps, SignInResult, StackStatus } from "./run";
+import { describeExcluded, type ExplainFacts, type ExplainReference, type WeightExplain } from "./explain";
+import type { DbSession, MealRow, SeedDeps, SignInResult, StackStatus, WeightEntryRow } from "./run";
 
 /**
  * The real ports of the runner: the Docker stack's status, the Auth API, the database as the demo user, the clock file.
@@ -124,7 +127,94 @@ function createSession(client: SupabaseClient, userId: string, email: string): D
       return Array.isArray(data) ? data.length : 0;
     },
 
+    async upsertWeights(rows: readonly WeightEntryRow[]) {
+      let created = 0;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        // As the demo user: user_id is the column default and row level security applies, like a weigh-in saved in the app.
+        const { data, error } = await client
+          .from("weight_entries")
+          .upsert(rows.slice(i, i + BATCH), { onConflict: "id", ignoreDuplicates: true })
+          .select("id");
+        if (error) throw new Error("weights_failed");
+        created += Array.isArray(data) ? data.length : 0;
+      }
+      return created;
+    },
+
+    async dropWeights(count) {
+      if (count === "all") {
+        const { data, error } = await client.from("weight_entries").delete().eq("user_id", userId).select("id");
+        if (error) throw new Error("drop_failed");
+        return Array.isArray(data) ? data.length : 0;
+      }
+      const newest = await client.from("weight_entries").select("id").eq("user_id", userId).order("measured_at", { ascending: false }).limit(count);
+      if (newest.error || !Array.isArray(newest.data)) throw new Error("drop_failed");
+      const ids = (newest.data as { id: string }[]).map((r) => r.id);
+      if (ids.length === 0) return 0;
+      const { data, error } = await client.from("weight_entries").delete().in("id", ids).select("id");
+      if (error) throw new Error("drop_failed");
+      return Array.isArray(data) ? data.length : 0;
+    },
+
     explain: (a) => collectExplain(client, userId, email, a),
+  };
+}
+
+/**
+ * The weight decisions at `now`, from the app's own reads and domain functions (read-only). The Home card is what the real
+ * Home loader decided (`moment`); everything else is recomputed here from the same series so the lines can say why.
+ */
+async function collectWeightExplain(
+  client: SupabaseClient,
+  userId: string,
+  context: ReadyContext,
+  facts: { moment: WeightExplain["moment"]; offlinePeriods: Parameters<typeof isOffline>[0] | null },
+  now: Date,
+): Promise<WeightExplain | null> {
+  const { row } = context;
+  const timeZone = resolveTimeZone(row.timezone);
+  const [series, acks, previous] = await Promise.all([
+    loadWeightSeries(client, userId),
+    client.from("events").select("payload").eq("user_id", userId).eq("name", MILESTONE_MOMENT.ackEvent).order("occurred_at", { ascending: false }).limit(50),
+    loadReferenceWeight(client, { before: now }),
+  ]);
+  if (series === null) return null;
+
+  const points = weeklyPoints(series.entries, timeZone, now);
+  const trend = buildWeightTrend({ points, baselineKg: row.start_weight_kg, timeZone, now });
+  const progress = milestoneProgress({
+    startKg: row.start_weight_kg,
+    goalKg: row.goal_weight_kg,
+    goalType: row.goal_type,
+    weeklyPoints: points,
+    complete: !series.truncated,
+  });
+
+  let acknowledgedWeeks: string[] | null = null;
+  if (!acks.error && Array.isArray(acks.data)) {
+    acknowledgedWeeks = [];
+    for (const r of acks.data as { payload?: unknown }[]) {
+      const week = typeof r.payload === "object" && r.payload !== null ? (r.payload as { week?: unknown }).week : null;
+      if (typeof week === "string" && parseDayKey(week) !== null) acknowledgedWeeks.push(week);
+    }
+  }
+
+  // The double-check compares with the previous weigh-in, or with the start weight when there is none (never when unknown).
+  let reference: ExplainReference = { kind: "unknown" };
+  if (typeof previous === "number") reference = { kind: "previous", kg: previous };
+  else if (previous === null) reference = row.start_weight_kg === null ? { kind: "none" } : { kind: "start", kg: row.start_weight_kg };
+
+  return {
+    entries: series.entries.length,
+    afterClock: series.entries.filter((e) => e.measuredAt.getTime() > now.getTime()).length,
+    truncated: series.truncated,
+    points: trend.points,
+    trend,
+    progress,
+    moment: facts.moment,
+    acknowledgedWeeks,
+    quiet: facts.offlinePeriods === null ? null : isOffline(facts.offlinePeriods, now),
+    reference,
   };
 }
 
@@ -179,6 +269,8 @@ async function collectExplain(
     storedEvidence = evidence.error ? null : (evidence.count ?? 0);
   }
 
+  const weight = await collectWeightExplain(client, userId, context, { moment: facts.milestone, offlinePeriods: facts.offlinePeriods }, now);
+
   const mealRows: { occurredAt: Date; aggregated: boolean }[] = [];
   for (const r of Array.isArray(meals.data) ? (meals.data as Record<string, unknown>[]) : []) {
     const occurredAt = toDate(r.occurred_at);
@@ -201,6 +293,7 @@ async function collectExplain(
     home,
     selection,
     dailyCap: a.dailyCap,
+    weight,
   };
 }
 

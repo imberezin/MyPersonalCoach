@@ -18,10 +18,12 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     offlinePeriods: [],
     hasAnyReport: true,
     lifecycle: "FIRST_WEEK",
-    firstWeek: { availableDays: 2, confirmedMeals: 3, availableDaysSinceLastMeal: 0 },
+    // During FIRST_WEEK the first-report invitation keys on confirmed meals, so a fixture with no report at all has none.
+    firstWeek: { availableDays: 2, confirmedMeals: overrides.hasAnyReport === false ? 0 : 3, availableDaysSinceLastMeal: overrides.hasAnyReport === false ? null : 0 },
     firstWeekSnoozed: NOT_SNOOZED,
     earlySignal: { due: true, level: "EARLY_SIGNAL" },
     quietHours: { kind: "NONE" },
+    milestone: null,
     ...overrides,
   };
 }

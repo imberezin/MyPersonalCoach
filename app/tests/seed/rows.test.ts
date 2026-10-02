@@ -4,6 +4,7 @@ import { USER_A, USER_B, as, createTestDb } from "../db/harness";
 import { parseSeedArgs, SEED_SCENARIOS, type SeedOptions } from "../../scripts/seed-demo/args";
 import { buildSeedPlan, periodBeforeMeal, resolveRelative, toMealRow, toProfileUpdate, type SeedPlan } from "../../scripts/seed-demo/plan";
 import { seedShabbatRows, seedShabbatSeries, toPlanShabbat } from "../../scripts/seed-demo/shabbat";
+import { toWeightRow } from "../../scripts/seed-demo/weights";
 
 /**
  * The rows the seed writes, applied to the REAL schema (PGlite, in memory: no Docker, no network) as the signed-in user, so
@@ -60,23 +61,40 @@ async function applyRun(o: SeedOptions, userId = USER_A) {
     );
     created += result.rows.length;
   }
-  return { plan, created, series };
+
+  // The weigh-ins, with the same conflict rule as the supabase-js call in db.ts (insert, ignore duplicates).
+  let weightsCreated = 0;
+  for (const weight of plan.weights) {
+    const row = toWeightRow(weight);
+    const result = await db.query(
+      `insert into public.weight_entries (id, weight_kg, measured_at, source) values ($1, $2, $3, $4) on conflict (id) do nothing returning id`,
+      [row.id, row.weight_kg, row.measured_at, row.source],
+    );
+    weightsCreated += result.rows.length;
+  }
+  return { plan, created, weightsCreated, series };
 }
 
+const weightCount = async (userId: string) => Number((await db.query<{ n: string }>("select count(*) as n from public.weight_entries where user_id = $1", [userId])).rows[0].n);
 const mealCount = async (userId: string) => Number((await db.query<{ n: string }>("select count(*) as n from public.meal_entries where user_id = $1", [userId])).rows[0].n);
 
 describe("the seed's rows satisfy the real schema", () => {
   it.each(SEED_SCENARIOS)("%s: profile, Shabbat periods and meals are accepted, and a re-run adds nothing", async (scenario) => {
     await db.query("delete from public.meal_entries where user_id = $1", [USER_A]);
+    await db.query("delete from public.weight_entries where user_id = $1", [USER_A]);
     await db.query("delete from public.offline_periods where user_id = $1", [USER_A]);
 
     const first = await asA(() => applyRun(options({ scenario })));
     expect(first.created).toBe(first.plan.meals.length);
     expect(await mealCount(USER_A)).toBe(first.plan.meals.length);
+    expect(first.weightsCreated).toBe(first.plan.weights.length);
+    expect(await weightCount(USER_A)).toBe(first.plan.weights.length);
 
     const again = await asA(() => applyRun(options({ scenario })));
     expect(again.created).toBe(0);
+    expect(again.weightsCreated).toBe(0);
     expect(await mealCount(USER_A)).toBe(first.plan.meals.length);
+    expect(await weightCount(USER_A)).toBe(first.plan.weights.length);
   });
 
   it("the profile becomes a First Week profile with the goals and the motivation as given", async () => {
@@ -165,6 +183,72 @@ describe("--drop-meals", () => {
       await db.query("delete from public.meal_entries where id = any($1::uuid[])", [ids]);
     });
     expect(await mealCount(USER_A)).toBe(plan.meals.length - 2);
+  });
+});
+
+describe("the weight presets' rows", () => {
+  it("the weekly-cycle profile is accepted with its end of the First Week, and a goal of none ties goal_type to no weight", async () => {
+    await asA(() => applyRun(options({ scenario: "w-down" })));
+    const down = (await db.query<Record<string, unknown>>("select lifecycle_state, first_week_ended_at, goal_type, goal_weight_kg, start_weight_kg from public.profiles where user_id = $1", [USER_A])).rows[0];
+    expect(down).toMatchObject({ lifecycle_state: "WEEKLY_CYCLE", goal_type: "numeric" });
+    expect(down.first_week_ended_at).not.toBeNull();
+    expect([Number(down.start_weight_kg), Number(down.goal_weight_kg)]).toEqual([80, 72]);
+
+    await asA(() => applyRun(options({ scenario: "w-nogoal" })));
+    const none = (await db.query<Record<string, unknown>>("select goal_type, goal_weight_kg from public.profiles where user_id = $1", [USER_A])).rows[0];
+    expect(none).toEqual({ goal_type: "none", goal_weight_kg: null });
+
+    await asA(() => applyRun(options({ scenario: "w-rising" })));
+    expect(Number((await db.query<{ s: string }>("select start_weight_kg as s from public.profiles where user_id = $1", [USER_A])).rows[0].s)).toBe(76);
+  });
+
+  it("the junk entry of 181 kg and the daily values are accepted, and what is stored is what the plan says", async () => {
+    await db.query("delete from public.weight_entries where user_id = $1", [USER_A]);
+    const { plan } = await asA(() => applyRun(options({ scenario: "w-junk" })));
+    const rows = (await db.query<{ id: string; weight_kg: string; source: string; measured_at: string }>(
+      "select id, weight_kg, source, measured_at from public.weight_entries where user_id = $1 order by measured_at",
+      [USER_A],
+    )).rows;
+    expect(rows.map((r) => Number(r.weight_kg))).toEqual(plan.weights.map((w) => w.weightKg));
+    expect(rows.map((r) => r.weight_kg)).toContain("181.00");
+    expect(new Set(rows.map((r) => r.source))).toEqual(new Set(["manual"]));
+    expect(rows.map((r) => new Date(r.measured_at).getTime())).toEqual(plan.weights.map((w) => w.measuredAt.getTime()));
+  });
+
+  it("the same plan for another e-mail does not collide, and the other user keeps their rows", async () => {
+    await db.query("delete from public.weight_entries");
+    await asA(() => applyRun(options({ scenario: "w-down" }), USER_A));
+    expect(await weightCount(USER_B)).toBe(0);
+    const second = await as(db, "authenticated", USER_B, () => applyRun(options({ scenario: "w-down", email: "second@eating-coach.test" }), USER_B));
+    expect(second.weightsCreated).toBe(6);
+    expect(await weightCount(USER_B)).toBe(6);
+    expect(await weightCount(USER_A)).toBe(6);
+  });
+});
+
+describe("--drop-weights", () => {
+  it("deletes the newest weigh-ins through RLS and the change log keeps no weight", async () => {
+    await db.query("delete from public.weight_entries");
+    await db.query("delete from public.audit_log where table_name = 'weight_entries'");
+    const { plan } = await asA(() => applyRun(options({ scenario: "w-down" })));
+    const newest = [...plan.weights].sort((a, b) => b.measuredAt.getTime() - a.measuredAt.getTime()).slice(0, 2).map((w) => w.id);
+
+    await asA(async () => {
+      const ids = (await db.query<{ id: string }>("select id from public.weight_entries where user_id = $1 order by measured_at desc limit 2", [USER_A])).rows.map((r) => r.id);
+      expect(ids).toEqual(newest);
+      await db.query("delete from public.weight_entries where id = any($1::uuid[])", [ids]);
+    });
+    expect(await weightCount(USER_A)).toBe(plan.weights.length - 2);
+
+    const audit = await db.query<{ action: string; old_data: unknown; new_data: unknown }>("select action, old_data, new_data from public.audit_log where table_name = 'weight_entries'");
+    expect(audit.rows).toEqual([
+      { action: "DELETE", old_data: null, new_data: null },
+      { action: "DELETE", old_data: null, new_data: null },
+    ]);
+    // Neither the weight nor its key appears anywhere in the trail.
+    const text = (await db.query<{ t: string }>("select coalesce(string_agg(to_jsonb(a)::text, ' '), '') as t from public.audit_log a")).rows[0].t;
+    expect(text).not.toContain("weight_kg");
+    expect(text).not.toMatch(/76\.2|76\.9/);
   });
 });
 

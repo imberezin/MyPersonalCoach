@@ -5,7 +5,18 @@ import type { FirstWeekProgress, FirstWeekStep } from "@/domain/firstWeekFlow";
 import type { HomeDecision } from "@/domain/home";
 import { LATE_EVENING, toDbStatus, type EarlySignalDecision, type Occurrence, type PatternRow, type PatternView } from "@/domain/patterns";
 import { isQuiet, type QuietHours } from "@/domain/quietHours";
-import { localDayOf, localMinuteOfDay } from "@/domain/time";
+import { localDayOf, localMinuteOfDay, resolveTimeZone, zonedMidnightUtc } from "@/domain/time";
+import {
+  MILESTONE_MOMENT,
+  WEIGHT_FLOW,
+  addDaysToDayKey,
+  parseDayKey,
+  type MilestoneMoment,
+  type MilestoneProgress,
+  type TrendPoint,
+  type WeightTrend,
+} from "@/domain/weight";
+import { formatClockInstant } from "./clockfile";
 
 /**
  * `--explain`: what the app will decide for the demo user at the current clock, as plain lines. The collecting is in
@@ -66,6 +77,28 @@ export function describeExcluded(
   return out.sort((a, b) => (a.localDay + a.time < b.localDay + b.time ? -1 : 1));
 }
 
+/** The previous weigh-in the "is that right?" check would compare with, or the start weight when there is none. */
+export type ExplainReference = { kind: "previous"; kg: number } | { kind: "start"; kg: number } | { kind: "none" } | { kind: "unknown" };
+
+/** What the weight item decides at the clock, collected with the app's own reads and domain functions (db.ts). */
+export interface WeightExplain {
+  /** Rows read (the newest 1500 at most). */
+  entries: number;
+  /** Rows dated after the clock: not happened yet, ignored by every rule. */
+  afterClock: number;
+  truncated: boolean;
+  points: readonly TrendPoint[];
+  trend: WeightTrend;
+  progress: MilestoneProgress;
+  /** What the Home loader decided (null = no card). */
+  moment: MilestoneMoment | null;
+  /** The week keys of the thanked landmarks. null = the read failed. */
+  acknowledgedWeeks: readonly string[] | null;
+  /** /report/weight is quiet at this instant (an offline period). null = unknown. */
+  quiet: boolean | null;
+  reference: ExplainReference;
+}
+
 export interface ExplainFacts {
   email: string;
   now: Date;
@@ -84,6 +117,8 @@ export interface ExplainFacts {
   home: HomeDecision;
   selection: ExperimentSelection | null;
   dailyCap: number;
+  /** null = the weight series could not be read. */
+  weight: WeightExplain | null;
 }
 
 function describeSelection(selection: ExperimentSelection | null): string {
@@ -113,6 +148,101 @@ function earlySignalBlockers(f: ExplainFacts, minute: number): string[] {
   if (minute >= LATE_EVENING.startMinute) reasons.push(`the signal's own hours (from ${clockText(LATE_EVENING.startMinute)}), so it never points at the evening during the evening`);
   if (f.home.state.key !== "EARLY_SIGNAL") reasons.push(`Home shows ${f.home.state.key} instead`);
   return reasons;
+}
+
+const kg = (n: number): string => n.toFixed(1);
+
+/** The window of the Home card for a confirming week: from the local midnight of the week after it, for 14 calendar days. null for a key that is not a date. */
+export function momentWindow(week: string, timeZone: string): { start: Date; end: Date } | null {
+  const tz = resolveTimeZone(timeZone);
+  const startKey = addDaysToDayKey(week, 7);
+  const endKey = addDaysToDayKey(startKey, MILESTONE_MOMENT.windowDays);
+  const from = parseDayKey(startKey);
+  const to = parseDayKey(endKey);
+  if (!from || !to) return null;
+  return { start: zonedMidnightUtc(from.year, from.month, from.day, tz), end: zonedMidnightUtc(to.year, to.month, to.day, tz) };
+}
+
+/** The highest reached landmark after the start: the one the Home card is about. */
+function highestReached(progress: MilestoneProgress) {
+  if (progress.kind !== "LIST") return null;
+  return [...progress.steps].reverse().find((s) => s.index >= 1 && s.state === "REACHED" && s.confirmedWeekStart !== null) ?? null;
+}
+
+/** Why the Home milestone card is NOT on screen at `now`, or null when nothing in the data hides it. */
+export function milestoneHiddenReason(w: WeightExplain, timeZone: string, now: Date): string | null {
+  if (!WEIGHT_FLOW.milestoneMomentEnabled) return "the milestone switch is off";
+  if (w.progress.kind === "NONE") return "there is no numeric goal below the start weight";
+  if (w.progress.kind === "UNKNOWN") return "the weight history is truncated, so no landmark can be claimed";
+  const step = highestReached(w.progress);
+  if (step === null || step.confirmedWeekStart === null) {
+    return "no landmark is reached yet (it takes two completed weekly averages in a row at or below it; the current week does not count)";
+  }
+  const window = momentWindow(step.confirmedWeekStart, timeZone);
+  if (window === null) return "the confirming week is not a date";
+  if (now.getTime() < window.start.getTime()) return `outside the window: it opens ${formatClockInstant(window.start, timeZone)}`;
+  if (now.getTime() >= window.end.getTime()) return `outside the window: it closed ${formatClockInstant(window.end, timeZone)}`;
+  if (w.acknowledgedWeeks === null) return "the acknowledgements could not be read (unknown is silence)";
+  if (w.acknowledgedWeeks.includes(step.confirmedWeekStart)) return "acknowledged (the person pressed Thanks for this week)";
+  return w.moment === null ? "the app could not decide (a read failed)" : null;
+}
+
+function weightLines(f: ExplainFacts, w: WeightExplain): string[] {
+  const lines: string[] = [];
+  lines.push(`weights: ${w.entries} entries${w.truncated ? " (the newest 1500: truncated, so no landmark is claimed)" : ""}, ${w.afterClock} dated after the clock and ignored`);
+
+  if (w.points.length === 0) {
+    lines.push("weekly points: none");
+  } else {
+    lines.push(`weekly points: ${w.points.map((p) => `${p.weekStart}=${kg(p.averageKg)} ${p.complete ? "complete" : "partial"}`).join(", ")}`);
+  }
+
+  const t = w.trend;
+  lines.push(
+    `weight trend: ${t.state}, direction ${t.direction ?? "none"}, stale ${t.stale ? "yes" : "no"}, plateau ${t.plateau ? "yes" : "no"}, since the start ${
+      t.sinceStart === null ? "none" : `${t.sinceStart.kind} ${kg(t.sinceStart.kg)} kg`
+    }`,
+  );
+
+  if (w.progress.kind !== "LIST") {
+    lines.push(w.progress.kind === "UNKNOWN" ? "landmarks: unknown (the history is truncated)" : "landmarks: none (no numeric goal below the start weight)");
+  } else {
+    const parts = w.progress.steps.map((s) => {
+      if (s.state !== "REACHED") return `${s.kg} ${s.state === "NEXT" ? "next" : "ahead"}`;
+      return s.reachedWeekStart === null ? `${s.kg} reached (the start)` : `${s.kg} reached (first week ${s.reachedWeekStart}, confirmed ${s.confirmedWeekStart})`;
+    });
+    lines.push(`landmarks: ${parts.join("; ")}${w.progress.goalReached ? "; the goal is reached" : ""}`);
+  }
+
+  const kind = w.moment === null ? "none" : w.moment.isGoal ? "goal" : "landmark";
+  lines.push(`Home milestone: ${kind}${w.moment === null ? "" : ` (confirming week ${w.moment.week})`}`);
+  const step = highestReached(w.progress);
+  if (step !== null && step.confirmedWeekStart !== null) {
+    const window = momentWindow(step.confirmedWeekStart, f.timeZone);
+    if (window !== null) {
+      const thanked = w.acknowledgedWeeks === null ? "unknown" : w.acknowledgedWeeks.includes(step.confirmedWeekStart) ? "yes" : "no";
+      lines.push(`milestone window for the week ${step.confirmedWeekStart}: ${formatClockInstant(window.start, f.timeZone)} to ${formatClockInstant(window.end, f.timeZone)}; acknowledged ${thanked}`);
+    }
+  }
+  if (w.moment === null) {
+    const why = milestoneHiddenReason(w, f.timeZone, f.now);
+    if (why !== null) lines.push(`milestone card hidden because: ${why}`);
+  }
+
+  lines.push(`/report/weight now: ${w.quiet === null ? "unknown (the offline periods could not be read)" : w.quiet ? "quiet (an offline period)" : "open"}`);
+  const r = w.reference;
+  lines.push(
+    `double-check reference: ${
+      r.kind === "previous"
+        ? `${kg(r.kg)} kg (the previous weigh-in)`
+        : r.kind === "start"
+          ? `${kg(r.kg)} kg (the start weight; no earlier weigh-in)`
+          : r.kind === "none"
+            ? "none (it will not ask)"
+            : "unknown (it will not ask)"
+    }`,
+  );
+  return lines;
 }
 
 /** The decisions as lines. Never contains a secret: only the demo e-mail, counts, ISO instants and codes. */
@@ -190,5 +320,8 @@ export function formatExplain(f: ExplainFacts): string[] {
     });
     lines.push(`wording gate: ${gate.open ? "OPEN" : `CLOSED (${gate.reason})`}`);
   }
+
+  if (f.weight === null) lines.push("weights: unknown (the series could not be read)");
+  else lines.push(...weightLines(f, f.weight));
   return lines;
 }

@@ -1,4 +1,6 @@
 import { FOOD_ROUTES } from "@/domain/food/routes";
+import { WEIGHT_ROUTES } from "@/domain/weight/routes";
+import { WEIGHT_FLOW } from "@/domain/weight/types";
 
 // The rows of the Report sheet, as data. Swapping a row for a real flow is a one-field change:
 // set `href` to the route (for example "/report/food"), and nothing else in the sheet changes.
@@ -19,7 +21,7 @@ export interface ReportOption {
 export const REPORT_OPTIONS: readonly ReportOption[] = [
   { id: "food", group: "category", emoji: "🍽️", href: FOOD_ROUTES.chooser },
   { id: "activity", group: "category", emoji: "🚶", href: null },
-  { id: "weight", group: "category", emoji: "⚖️", href: null },
+  { id: "weight", group: "category", emoji: "⚖️", href: WEIGHT_FLOW.reportingEnabled ? WEIGHT_ROUTES.entry : null },
   { id: "sleep", group: "category", emoji: "😴", href: null },
   { id: "feeling", group: "category", emoji: "🧠", href: null },
   { id: "photo", group: "input", emoji: "📷", href: FOOD_ROUTES.photo },

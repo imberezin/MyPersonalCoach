@@ -9,6 +9,7 @@ import { loadFirstWeekProgress, loadFirstWeekSnooze } from "@/lib/firstWeek/load
 import { parseOfflinePeriodRows } from "@/lib/offline/rows";
 import type { OnboardingContext } from "@/lib/onboarding/context";
 import { loadLateEveningSignal, loadQuietHours } from "@/lib/patterns/load";
+import { loadMilestoneMoment } from "@/lib/weight/load";
 
 /**
  * The tables whose rows are CONFIRMED reports; any row in any of them means the user has reported.
@@ -36,6 +37,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
     firstWeekSnoozed: { ...NOT_SNOOZED },
     earlySignal: null,
     quietHours: null,
+    milestone: null,
   };
   if (context.kind !== "ready") return nothingKnown;
 
@@ -47,7 +49,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
     // failures touches the two facts Home has always needed (they are independent loaders that never throw).
     const inFirstWeek = lifecycle === "FIRST_WEEK";
 
-    const [offlinePeriods, hasAnyReport, firstWeek, firstWeekSnoozed, signal] = await Promise.all([
+    const [offlinePeriods, hasAnyReport, firstWeek, firstWeekSnoozed, signal, milestone] = await Promise.all([
       loadOfflinePeriods(supabase, userId, now),
       loadHasAnyReport(supabase, userId),
       inFirstWeek ? loadFirstWeekProgress(supabase, userId, timeZone, now) : Promise.resolve(null),
@@ -55,6 +57,9 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
       inFirstWeek ? loadFirstWeekSnooze(supabase, userId, now) : Promise.resolve({ ...NOT_SNOOZED }),
       // Phase 2: the live meals and the pattern row. null = unknown, and then there is simply no card.
       inFirstWeek && PATTERN_FLOW.earlySignalEnabled ? loadLateEveningSignal(supabase, userId, timeZone, now) : Promise.resolve(null),
+      // The weight series, read only for a person with a numeric goal below the start weight (zero queries otherwise).
+      // null = no moment or unknown, and unknown is silence: it never changes any other fact.
+      loadMilestoneMoment(context, now),
     ]);
 
     // The data-level decision (pure); the resolver adds only the time-of-day rules.
@@ -72,6 +77,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
       firstWeekSnoozed,
       earlySignal,
       quietHours,
+      milestone,
     };
   } catch {
     // The loaders catch their own failures; this only guards a malformed context.

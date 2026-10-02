@@ -43,7 +43,7 @@ function adminOrNull(admin: SupabaseClient | undefined): SupabaseClient | null {
 /** One row in `app_errors`. `userId` comes from the verified session, never from a request. */
 export async function logAppError(a: {
   userId: string | null;
-  area: "ai" | "food" | "ledger";
+  area: "ai" | "food" | "ledger" | "weight";
   message: string;
   context?: ErrorContext;
   admin?: SupabaseClient;

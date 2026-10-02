@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { IntlProvider, type AbstractIntlMessages } from "use-intl";
 import { describe, expect, it, vi } from "vitest";
 import { FOOD_ROUTES } from "@/domain/food/routes";
+import { WEIGHT_ROUTES } from "@/domain/weight/routes";
 import { ReportSheetProvider, useReportSheet } from "./ReportSheet";
 import { REPORT_OPTIONS, type ReportOption } from "./reportOptions";
 import { buildShellTestMessages } from "./shellTestMessages";
@@ -58,15 +59,15 @@ describe("ReportSheet markup", () => {
     expect(title).toContain('tabindex="-1"');
   });
 
-  it("lists seven rows, three of them links to the food flow, and one Close button", () => {
+  it("lists seven rows, four of them links, and one Close button", () => {
     const dialog = dialogOf(renderSheet());
     const lists = dialog.match(/<ul\b[\s\S]*?<\/ul>/g) ?? [];
     expect(lists).toHaveLength(2);
     const rows = lists.join("");
     expect(rows.match(/<li\b/g)).toHaveLength(7);
-    // Food, Photo and Writing are links; the other four rows stay inactive text.
+    // Food, Weight, Photo and Writing are links (the categories list comes first); the other three rows stay inactive text.
     const hrefs = [...rows.matchAll(/<a\b[^>]*\shref="([^"]+)"/g)].map((match) => match[1]);
-    expect(hrefs).toEqual([FOOD_ROUTES.chooser, FOOD_ROUTES.photo, FOOD_ROUTES.text]);
+    expect(hrefs).toEqual([FOOD_ROUTES.chooser, WEIGHT_ROUTES.entry, FOOD_ROUTES.photo, FOOD_ROUTES.text]);
     expect(rows).not.toMatch(/<button\b/);
     expect(dialog.match(/<button\b/g)).toHaveLength(1);
     expect(dialog).toContain(`>${sheetText.close}</button>`);
@@ -92,8 +93,8 @@ describe("ReportSheet markup", () => {
     const options = REPORT_OPTIONS.map((option) => (option.id === "activity" ? { ...option, href: "/report/activity" } : option));
     const dialog = dialogOf(renderSheet(options));
     const links = dialog.match(/<a\b[^>]*>/g) ?? [];
-    // The three food rows plus the one switched on here.
-    expect(links).toHaveLength(4);
+    // The four linked rows plus the one switched on here.
+    expect(links).toHaveLength(5);
     expect(links.some((link) => link.includes('href="/report/activity"'))).toBe(true);
     expect(dialog.match(/<li\b/g)).toHaveLength(7);
     // The other rows are still inactive, so the note stays.

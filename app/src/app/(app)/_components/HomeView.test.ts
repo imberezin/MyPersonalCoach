@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { IntlProvider, type AbstractIntlMessages } from "use-intl";
 import { describe, expect, it, vi } from "vitest";
 import firstWeekStyles from "@/components/firstWeek/firstWeek.module.css";
+import progressStyles from "@/components/progress/progress.module.css";
 import { ReportSheetProvider } from "@/components/shell/ReportSheet";
 import { buildShellTestMessages } from "@/components/shell/shellTestMessages";
 import ui from "@/components/ui/ui.module.css";
@@ -37,6 +38,7 @@ vi.mock("@/app/(flow)/first-week/actions", () => ({
   snoozeFirstWeekCardAction: async () => {},
   answerEarlySignalAction: async () => {},
 }));
+vi.mock("@/app/(app)/progress/actions", () => ({ acknowledgeMilestoneAction: async () => {} }));
 vi.mock("./HomeRefresher", () => ({
   HomeRefresher: ({ renderedAt }: { renderedAt: number }) => createElement("i", { "data-refresher": renderedAt }),
 }));
@@ -267,6 +269,72 @@ describe("HomeView", () => {
       const page = withoutSheet(await render({ ...SIGNAL, action: null }));
       expect(page).not.toContain("<form");
       expect(page).not.toContain("<button");
+    });
+  });
+
+  describe("the landmark card", () => {
+    const MILESTONE = (isGoal: boolean): HomeDecision => ({
+      state: { key: "MILESTONE_REACHED", week: "2026-10-18", isGoal },
+      action: { kind: "OPEN_PROGRESS", week: "2026-10-18" },
+      degraded: false,
+    });
+
+    it.each(["he", "en"] as const)("%s: a link to /progress as the primary control, then a Thanks form with the week, in one column", async (locale) => {
+      const words = (locale === "he" ? he : en).home;
+      const page = withoutSheet(await render(MILESTONE(false), "Asia/Jerusalem", locale));
+
+      expect(page).toContain(words.milestoneReached.title);
+      const link = /<a\b[^>]*href="\/progress"[^>]*>([^<]*)<\/a>/.exec(page);
+      expect(link?.[1]).toBe(words.milestoneCta);
+      expect(link?.[0]).toContain(ui.primary);
+      expect(page.match(/<a\b/g)).toHaveLength(1);
+
+      // Thanks: one form with the hidden week and ONE secondary submit button; nothing else is a button.
+      expect(page.match(/<form\b/g)).toHaveLength(1);
+      expect(page.match(/<button\b/g)).toHaveLength(1);
+      const hidden = /<input\b[^>]*type="hidden"[^>]*>/.exec(page)?.[0] ?? "";
+      expect(hidden).toContain('name="week"');
+      expect(hidden).toContain('value="2026-10-18"');
+      const button = /<button\b[^>]*>([^<]*)<\/button>/.exec(page);
+      expect(button?.[0]).toContain('type="submit"');
+      expect(button?.[0]).toContain(ui.secondary);
+      expect(button?.[1]).toBe(words.milestoneAck);
+
+      // The wrapper holds both, link first, in the column the landmark card owns (not First Week's sheet).
+      expect(page).toContain(`<div class="${progressStyles.homeActions}">`);
+      expect(page).not.toContain(firstWeekStyles.homeActions);
+      expect(page.indexOf("<a ")).toBeLessThan(page.indexOf("<form"));
+    });
+
+    it("uses the goal's own words when the landmark is the goal", async () => {
+      const page = withoutSheet(await render(MILESTONE(true)));
+      expect(page).toContain(he.home.milestoneGoalReached.title);
+      expect(page).not.toContain(he.home.milestoneReached.title);
+      expect(page).toContain('href="/progress"');
+    });
+
+    it("has no Report sheet button, no emoji and no first-report invitation", async () => {
+      const page = withoutSheet(await render(MILESTONE(false)));
+      expect(page).not.toContain('aria-haspopup="dialog"');
+      expect(page).not.toContain(he.home.firstReport.cta);
+      expect(page).not.toContain('aria-hidden="true"');
+    });
+
+    it("shows no number and no kilogram value, and has exactly one h1", async () => {
+      for (const locale of ["he", "en"] as const) {
+        for (const isGoal of [false, true]) {
+          const page = withoutSheet(await render(MILESTONE(isGoal), "UTC", locale));
+          expect(page.match(/<h1[\s>]/g)).toHaveLength(1);
+          const visible = page.replace(/<script[^]*?<\/script>/g, " ").replace(/<[^>]*>/g, " ");
+          expect(visible, locale).not.toMatch(/\d|!|%|kg|ק"ג/i);
+        }
+      }
+    });
+
+    it("renders nothing for the buttons when the decision has no action", async () => {
+      const page = withoutSheet(await render({ ...MILESTONE(false), action: null }));
+      expect(page).not.toContain("<form");
+      expect(page).not.toContain("<a ");
     });
   });
 

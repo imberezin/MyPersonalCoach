@@ -141,6 +141,14 @@ describe("logAppError", () => {
     ]);
   });
 
+  it("accepts the weight area, with codes only", async () => {
+    const { client, inserts } = adminDouble();
+    await logAppError({ userId: "u", area: "weight", message: "save_error", context: { stage: "insert", pg_code: "42703" }, admin: client });
+    expect(inserts).toEqual([
+      { table: "app_errors", row: { user_id: "u", area: "weight", message: "save_error", context: { stage: "insert", pg_code: "42703" } } },
+    ]);
+  });
+
   it("accepts a null user and drops context strings that look like content", async () => {
     const { client, inserts } = adminDouble();
     await logAppError({ userId: null, area: "ledger", message: "ledger_unavailable", context: { note: "x".repeat(65), keep: "y".repeat(64) }, admin: client });

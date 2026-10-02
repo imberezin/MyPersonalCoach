@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { signOut } from "@/app/actions";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { MEALS_ROUTES } from "@/domain/food";
+import { WEIGHT_ROUTES } from "@/domain/weight";
 import { getTranslations } from "@/i18n/server";
 import { InfoPage } from "../_components/InfoPage";
 import { SetupNotice } from "../_components/SetupNotice";
@@ -28,6 +29,10 @@ export default async function MePage() {
         <p>{t("mealsHint")}</p>
         <ButtonLink href={MEALS_ROUTES.list} variant="secondary">
           {t("mealsLink")}
+        </ButtonLink>
+        <p>{t("weightsHint")}</p>
+        <ButtonLink href={WEIGHT_ROUTES.list} variant="secondary">
+          {t("weightsLink")}
         </ButtonLink>
         <form action={signOut}>
           <Button type="submit" variant="secondary">

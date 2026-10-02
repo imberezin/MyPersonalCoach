@@ -14,6 +14,11 @@ vi.mock("@/domain/patterns/types", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/domain/patterns/types")>()),
   PATTERN_FLOW: flow,
 }));
+const weightFlow = vi.hoisted(() => ({ reportingEnabled: true, progressEnabled: true, milestoneMomentEnabled: true }));
+vi.mock("@/domain/weight/types", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/domain/weight/types")>()),
+  WEIGHT_FLOW: weightFlow,
+}));
 
 const USER = "00000000-0000-4000-8000-000000000001";
 const NOW = new Date("2027-01-09T16:00:00Z");
@@ -40,6 +45,7 @@ let errorLog: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   flow.detectionEnabled = true;
   flow.earlySignalEnabled = true;
+  weightFlow.milestoneMomentEnabled = true;
   // The loader logs failures (code only); keep the test output quiet.
   errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -72,6 +78,7 @@ describe("loadHomeFacts: no profile to read", () => {
         firstWeekSnoozed: NOT_SNOOZED,
         earlySignal: null,
         quietHours: null,
+        milestone: null,
       });
       expect(queries).toEqual([]);
     },
@@ -132,6 +139,7 @@ describe("loadHomeFacts: ready", () => {
       firstWeekSnoozed: NOT_SNOOZED,
       earlySignal: null,
       quietHours: null,
+      milestone: null,
     });
   });
 
@@ -520,5 +528,126 @@ describe("loadHasAnyReport", () => {
       },
     } as unknown as SupabaseClient;
     expect(await loadHasAnyReport(broken, USER)).toBeNull();
+  });
+});
+
+describe("loadHomeFacts: the milestone fact", () => {
+  // Start 80, goal 70 (landmarks 80, 75, 70). The weeks of 20 and 27 December are both at or below 75, so the landmark
+  // was confirmed in the week of 27 December and its card runs from Sunday 3 January for 14 days: NOW (9 January) is inside.
+  const NUMERIC = { goal_type: "numeric", start_weight_kg: 80, goal_weight_kg: 70 };
+  const SERIES = "weight_entries:id, weight_kg, measured_at";
+  const BASE_SIX = ["offline_periods:type, start_at, end_at", ...REPORT_TABLES.map((t) => `${t}:id`)];
+  const entry = (n: number, day: string, kg: number) => ({ id: `00000000-0000-4000-8000-00000000000${n}`, weight_kg: kg, measured_at: `${day}T08:00:00+00:00` });
+  const REACHED_75 = [entry(1, "2026-12-22", 74.9), entry(2, "2026-12-29", 74.5)];
+
+  function numericContext(supabase: SupabaseClient, over: Record<string, unknown> = {}): OnboardingContext {
+    const row = normalizeRow({ lifecycle_state: "WEEKLY_CYCLE", timezone: "Asia/Jerusalem", ...NUMERIC, ...over }, null);
+    if (!row) throw new Error("the fixture row did not normalize");
+    return { kind: "ready", userId: USER, row, supabase };
+  }
+
+  const weightTables = (over: Record<string, FakeTable> = {}): Record<string, FakeTable> => ({
+    offline_periods: EMPTY,
+    ...allReportTables(EMPTY),
+    weight_entries: { rows: REACHED_75 },
+    events: EMPTY,
+    ...over,
+  });
+  const shape = (queries: Array<{ table: string; columns: string }>) => queries.map((q) => `${q.table}:${q.columns}`).sort();
+
+  it("a numeric goal below the start weight adds the weight series read to the recorded queries, and the fact is the moment", async () => {
+    const { client, queries } = createFakeReadSupabase(weightTables({ events: EMPTY }));
+    const facts = await loadHomeFacts(numericContext(client), NOW);
+    expect(facts.milestone).toEqual({ week: "2026-12-27", isGoal: false });
+    // The six reads Home has always made, the series, and the acknowledgements (a candidate exists).
+    expect(shape(queries)).toEqual([...BASE_SIX, SERIES, "events:payload"].sort());
+  });
+
+  it("no candidate: only the series is added (not the acknowledgements)", async () => {
+    const { client, queries } = createFakeReadSupabase(weightTables({ weight_entries: { rows: [entry(1, "2026-12-29", 74.5)] } }));
+    const facts = await loadHomeFacts(numericContext(client), NOW);
+    expect(facts.milestone).toBeNull();
+    expect(shape(queries)).toEqual([...BASE_SIX, SERIES].sort());
+  });
+
+  it("an acknowledged week is no moment", async () => {
+    const { client } = createFakeReadSupabase(weightTables({ events: { rows: [{ payload: { week: "2026-12-27" } }] } }));
+    expect((await loadHomeFacts(numericContext(client), NOW)).milestone).toBeNull();
+  });
+
+  it.each([
+    ["goal_type none", { goal_type: "none" }],
+    ["goal_type behavioral", { goal_type: "behavioral" }],
+    ["a goal not below the start weight", { goal_weight_kg: 90 }],
+    ["no goal weight", { goal_weight_kg: null }],
+  ])("%s: the recorded query list is exactly the six it always was, and the fact is null", async (_name, over) => {
+    const { client, queries } = createFakeReadSupabase(weightTables());
+    const facts = await loadHomeFacts(numericContext(client, over), NOW);
+    expect(facts.milestone).toBeNull();
+    expect(shape(queries)).toEqual([...BASE_SIX].sort());
+  });
+
+  it("the switch off: no weight read at all", async () => {
+    weightFlow.milestoneMomentEnabled = false;
+    const { client, queries } = createFakeReadSupabase(weightTables());
+    const facts = await loadHomeFacts(numericContext(client), NOW);
+    expect(facts.milestone).toBeNull();
+    expect(shape(queries)).toEqual([...BASE_SIX].sort());
+  });
+
+  it("a failing series read is null and changes nothing else: no degraded fact, the others intact", async () => {
+    const { client } = createFakeReadSupabase(weightTables({ weight_entries: FAILS, meal_entries: ONE_ROW, offline_periods: { rows: [SHABBAT_ROW] } }));
+    const facts = await loadHomeFacts(numericContext(client), NOW);
+    expect(facts.milestone).toBeNull();
+    expect(facts.hasAnyReport).toBe(true);
+    expect(facts.offlinePeriods).toHaveLength(1);
+    expect(facts.lifecycle).toBe("WEEKLY_CYCLE");
+  });
+
+  it("a thrown series or acknowledgements read is null and the other facts are intact", async () => {
+    const failures: Array<Record<string, FakeTable>> = [{ weight_entries: THROWS }, { events: THROWS }, { events: FAILS }];
+    for (const over of failures) {
+      const { client } = createFakeReadSupabase(weightTables({ meal_entries: ONE_ROW, ...over }));
+      const facts = await loadHomeFacts(numericContext(client), NOW);
+      expect(facts.milestone).toBeNull();
+      expect(facts.hasAnyReport).toBe(true);
+      expect(facts.offlinePeriods).toEqual([]);
+    }
+  });
+
+  it("holds the invariant: a moment implies a ready context with a numeric goal", async () => {
+    const fixtures: Array<[string, Record<string, unknown>]> = [
+      ["numeric", {}],
+      ["none", { goal_type: "none" }],
+      ["behavioral", { goal_type: "behavioral" }],
+      ["no goal weight", { goal_weight_kg: null }],
+    ];
+    for (const [name, over] of fixtures) {
+      const { client } = createFakeReadSupabase(weightTables());
+      const ctx = numericContext(client, over);
+      const facts = await loadHomeFacts(ctx, NOW);
+      if (facts.milestone !== null) {
+        expect(ctx.kind, name).toBe("ready");
+        expect(ctx.kind === "ready" && ctx.row.goal_type, name).toBe("numeric");
+      }
+    }
+    for (const kind of ["not_configured", "signed_out", "unavailable", "profile_missing"] as const) {
+      const { client } = createFakeReadSupabase(weightTables());
+      const ctx = { kind, supabase: client, userId: USER } as unknown as OnboardingContext;
+      expect((await loadHomeFacts(ctx, NOW)).milestone, kind).toBeNull();
+    }
+  });
+
+  it("a FIRST_WEEK context with a numeric goal also reads the series, and its First Week facts are unchanged", async () => {
+    const { client, queries } = createFakeReadSupabase({
+      ...weightTables(),
+      profiles: { rows: [{ first_week_started_at: "2027-01-04T10:00:00Z" }] },
+      patterns: EMPTY,
+      user_preferences: EMPTY,
+    });
+    const facts = await loadHomeFacts(numericContext(client, { lifecycle_state: "FIRST_WEEK" }), NOW);
+    expect(facts.lifecycle).toBe("FIRST_WEEK");
+    expect(facts.firstWeek).not.toBeNull();
+    expect(shape(queries)).toContain(SERIES);
   });
 });

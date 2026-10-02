@@ -9,8 +9,8 @@ export interface HomeCopy {
   lead: string | null;
   body: string;
   /**
-   * Non-null exactly when the decision carries an action other than answering the Early Signal. `lead` is the
-   * sentence above the button; First Week Start and the summary card say their piece in `copy.lead` and
+   * Non-null exactly when the decision carries an action other than answering the Early Signal or opening Progress for a
+   * landmark. `lead` is the sentence above the button; First Week Start and the summary card say their piece in `copy.lead` and
    * `copy.body` instead, so their own is null. `snoozeLabel` is the "Not now" of the two First Week cards that
    * can be put away for a day (the summary and the welcome-back), and null for every other state.
    */
@@ -20,6 +20,11 @@ export interface HomeCopy {
    * come in the order of the spec; the card has no other button and no invitation.
    */
   earlySignal: { confirm: string; unsure: string; reject: string } | null;
+  /**
+   * The two buttons of the landmark card: the way to Progress (primary) and the quiet "Thanks" that ends the card for that
+   * landmark. Non-null exactly for that state, which has no invitation: the card carries its own action, and shows no number.
+   */
+  milestone: { cta: string; ackLabel: string } | null;
   /** Non-null exactly when a fact was unknown. One calm sentence, never an error. */
   degradedNote: string | null;
 }
@@ -40,6 +45,8 @@ const EMOJI: Record<HomeCopyKey, string | null> = {
   firstWeekSummaryReadyLittle: null,
   firstWeekWelcomeBack: null,
   earlySignalLateEvening: "💡",
+  milestoneReached: null,
+  milestoneGoalReached: null,
 };
 
 // U+2066 (left-to-right isolate) and U+2069 (pop directional isolate): "16:10" stays one
@@ -74,6 +81,8 @@ function invitationFor(key: HomeCopyKey, t: Translator): HomeCopy["invitation"] 
     case "firstWeekWelcomeBack":
       return { lead: t("firstWeekWelcomeBack.lead"), cta: t("firstWeekWelcomeBack.cta"), snoozeLabel: t("firstWeekSnooze") };
     case "earlySignalLateEvening":
+    case "milestoneReached":
+    case "milestoneGoalReached":
       return null;
     case "morning":
     case "evening":
@@ -109,12 +118,14 @@ export function homeCopyFor(
     title: t(`${key}.title`),
     lead: key === "firstWeekStart" ? t("firstWeekStart.lead") : null,
     body: t(`${key}.body`, values),
-    // The Early Signal card answers with its three buttons, so its action brings no invitation (invitationFor says null).
+    // The Early Signal card answers with its three buttons and the landmark card has its own two, so neither brings an
+    // invitation (invitationFor says null).
     invitation: decision.action ? invitationFor(key, t) : null,
     earlySignal:
       state.key === "EARLY_SIGNAL"
         ? { confirm: t(`${key}.confirm`), unsure: t(`${key}.unsure`), reject: t(`${key}.reject`) }
         : null,
+    milestone: state.key === "MILESTONE_REACHED" ? { cta: t("milestoneCta"), ackLabel: t("milestoneAck") } : null,
     degradedNote: decision.degraded ? t("degraded") : null,
   };
 }

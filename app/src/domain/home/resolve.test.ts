@@ -32,6 +32,8 @@ const WINTER_SHABBAT = period("SHABBAT", "2027-01-08T14:10:00Z", "2027-01-09T15:
 
 // Mid-First Week: the rules are nowhere near ready and nobody has been away, so the First Week states stay out of the way.
 const KEEP_GOING: FirstWeekProgress = { availableDays: 2, confirmedMeals: 3, availableDaysSinceLastMeal: 0 };
+// During FIRST_WEEK the first-report invitation keys on confirmed meals, so a fixture with no report at all has none.
+const NO_MEALS_YET: FirstWeekProgress = { availableDays: 2, confirmedMeals: 0, availableDaysSinceLastMeal: null };
 
 function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
   return {
@@ -40,10 +42,11 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     offlinePeriods: [WINTER_SHABBAT],
     hasAnyReport: true,
     lifecycle: "FIRST_WEEK",
-    firstWeek: KEEP_GOING,
+    firstWeek: overrides.hasAnyReport === false ? NO_MEALS_YET : KEEP_GOING,
     firstWeekSnoozed: NOT_SNOOZED,
     earlySignal: null,
     quietHours: null,
+    milestone: null,
     ...overrides,
   };
 }
@@ -317,6 +320,7 @@ describe("resolveHome: the action", () => {
       firstWeekSnoozed: NOT_SNOOZED,
       earlySignal: null,
       quietHours: null,
+      milestone: null,
     });
     expect(decision).toEqual({ state: { key: "MORNING" }, action: null, degraded: true });
   });
@@ -474,6 +478,8 @@ describe("homeCopyKey", () => {
     [{ key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: false }, "firstWeekSummaryReadyLittle"],
     [{ key: "FIRST_WEEK_WELCOME_BACK" }, "firstWeekWelcomeBack"],
     [{ key: "EARLY_SIGNAL", signal: "late_evening_meals" }, "earlySignalLateEvening"],
+    [{ key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: false }, "milestoneReached"],
+    [{ key: "MILESTONE_REACHED", week: "2026-10-25", isGoal: true }, "milestoneGoalReached"],
     [{ key: "SILENCE", reason: "NOTHING_TO_SAY" }, "silence"],
     [{ key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" }, "offlineShabbat"],
     [{ key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" }, "offlineOther"],

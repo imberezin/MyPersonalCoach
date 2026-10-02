@@ -215,14 +215,15 @@ describe("delete_meal_entry: the audit trail holds no content", () => {
     expect(JSON.stringify(rows)).not.toContain(MARKER);
   });
 
-  it("audits a weight the same way: a content-free DELETE, an UPDATE that keeps its summary", async () => {
+  it("audits a weight the same way: a content-free DELETE, an UPDATE with no weight", async () => {
     const { rows } = await asA(() => db.query<{ id: string }>("insert into public.weight_entries (weight_kg) values (118.7) returning id"));
     const id = rows[0].id;
     await db.query("update public.weight_entries set weight_kg = 117.2 where id = $1", [id]);
     await asA(() => db.query("delete from public.weight_entries where id = $1", [id]));
     const audit = await auditRows("table_name = 'weight_entries'");
     expect(audit.map((r) => r.action)).toEqual(["UPDATE", "DELETE"]);
-    expect(audit[0].old_data).toMatchObject({ id, weight_kg: 118.7 });
+    expect(audit[0].old_data).toMatchObject({ id });
+    expect(Object.keys(audit[0].old_data ?? {})).not.toContain("weight_kg");
     expect(audit[1]).toMatchObject({ row_id: id, old_data: null, new_data: null });
   });
 
@@ -510,13 +511,13 @@ describe("who may call it", () => {
 
 describe("the migration scrubs what the old trigger already wrote", () => {
   it("empties old DELETE rows and removes the food names from old UPDATE rows", async () => {
-    // A database with every migration EXCEPT the new one, so the old trigger writes the old kind of rows.
+    // A database with only the migrations that sort BEFORE the new one (later files replace the trigger again), so the old trigger writes the old kind of rows.
     const source = process.env.MIGRATIONS_DIR ?? join(process.cwd(), "supabase", "migrations");
     const before = mkdtempSync(join(tmpdir(), "migrations-before-"));
     const previous = process.env.MIGRATIONS_DIR;
     let old: PGlite | null = null;
     try {
-      for (const file of readdirSync(source).filter((f) => f.endsWith(".sql") && f !== NEW_MIGRATION)) cpSync(join(source, file), join(before, file));
+      for (const file of readdirSync(source).filter((f) => f.endsWith(".sql") && f < NEW_MIGRATION)) cpSync(join(source, file), join(before, file));
       process.env.MIGRATIONS_DIR = before;
       old = await createTestDb();
     } finally {

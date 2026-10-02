@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseSeedArgs, type SeedOptions } from "../../scripts/seed-demo/args";
 import { formatExplain, type ExplainFacts } from "../../scripts/seed-demo/explain";
-import { runSeed, type DbSession, type MealRow, type SeedDeps, type SignInResult, type StackStatus } from "../../scripts/seed-demo/run";
+import { runSeed, type DbSession, type MealRow, type SeedDeps, type SignInResult, type StackStatus, type WeightEntryRow } from "../../scripts/seed-demo/run";
 import type { ShabbatPeriodRow } from "@/domain/onboarding/shabbatRows";
 
 /**
@@ -48,6 +48,7 @@ const CLEAN_FACTS = (over: Partial<ExplainFacts> = {}): ExplainFacts => ({
   home: { state: { key: "EARLY_SIGNAL", signal: "late_evening_meals" }, action: { kind: "ANSWER_EARLY_SIGNAL" }, degraded: false },
   selection: { kind: "NONE", reason: "pattern_not_established" },
   dailyCap: 40,
+  weight: null,
   ...over,
 });
 
@@ -58,6 +59,7 @@ interface Rig {
   profile: unknown[];
   shabbat: ShabbatPeriodRow[];
   meals: MealRow[];
+  weights: WeightEntryRow[];
   clock: { instant: Date | null };
   text(): string;
 }
@@ -68,6 +70,7 @@ function rig(over: { stack?: StackStatus | null; password?: string | undefined; 
   const profile: unknown[] = [];
   const shabbat: ShabbatPeriodRow[] = [];
   const meals: MealRow[] = [];
+  const weights: WeightEntryRow[] = [];
   const clock = { instant: over.existingClock ?? (null as Date | null) };
 
   const session: DbSession = {
@@ -92,6 +95,15 @@ function rig(over: { stack?: StackStatus | null; password?: string | undefined; 
     async dropMeals(count) {
       calls.push(`dropMeals:${count}`);
       return typeof count === "number" ? count : 7;
+    },
+    async upsertWeights(rows) {
+      calls.push("upsertWeights");
+      weights.push(...rows);
+      return rows.length;
+    },
+    async dropWeights(count) {
+      calls.push(`dropWeights:${count}`);
+      return typeof count === "number" ? count : 5;
     },
     async explain() {
       calls.push("explain");
@@ -136,7 +148,7 @@ function rig(over: { stack?: StackStatus | null; password?: string | undefined; 
       },
     },
   };
-  return { deps, lines, calls, profile, shabbat, meals, clock, text: () => lines.join("\n") };
+  return { deps, lines, calls, profile, shabbat, meals, weights, clock, text: () => lines.join("\n") };
 }
 
 function expectNoLeak(r: Rig) {
@@ -235,6 +247,106 @@ describe("a seeding run", () => {
   });
 });
 
+describe("a run with weigh-ins", () => {
+  it("writes the weights after the meals, sets the lifecycle and the clock, and prints counts only", async () => {
+    const r = rig();
+    expect(await runSeed(opts({ scenario: "w-down" }), r.deps)).toEqual({ ok: true });
+    expect(r.calls).toEqual(["signIn", "writeProfile", "upsertShabbat", "listPeriods", "upsertMeals", "upsertWeights", "clockWrite"]);
+    expect(r.meals).toHaveLength(0);
+    expect(r.weights).toHaveLength(6);
+    expect(r.weights.map((w) => w.weight_kg)).toEqual([79.6, 78.9, 78.1, 77.4, 76.9, 76.2]);
+    expect(r.profile[0]).toMatchObject({ lifecycle_state: "WEEKLY_CYCLE", goal_type: "numeric", start_weight_kg: 80, goal_weight_kg: 72, first_week_ended_at: "2026-09-27T09:00:00.000Z" });
+    expect(r.clock.instant?.toISOString()).toBe("2026-10-28T07:00:00.000Z"); // Wed 09:00 Asia/Jerusalem
+
+    expect(r.text()).toContain("Weights: 6 planned (6 new), start 80 kg, goal 72 kg.");
+    expect(r.text()).toContain("Lifecycle: WEEKLY_CYCLE; the First Week ended 2026-09-27T12:00:00+03:00.");
+    expect(warnings(r)).toHaveLength(1);
+    expectNoLeak(r);
+  });
+
+  it("a First Week run without weights never touches the weights", async () => {
+    const r = rig();
+    await runSeed(opts({ scenario: "day3" }), r.deps);
+    expect(r.calls).not.toContain("upsertWeights");
+    expect(r.weights).toHaveLength(0);
+    expect(r.text()).not.toContain("Weights:");
+    expect(r.text()).not.toContain("Lifecycle:");
+  });
+
+  it("--goal-weight none is said plainly, and a junk-only run still writes the one entry", async () => {
+    const r = rig();
+    await runSeed(opts({ scenario: "w-nogoal" }), r.deps);
+    expect(r.text()).toContain("no goal weight");
+    expect(r.profile[0]).toMatchObject({ goal_type: "none", goal_weight_kg: null });
+    const junk = rig();
+    await runSeed(opts({ scenario: "w-none", "junk-weights": "on", days: "40" }), junk.deps);
+    expect(junk.weights.map((w) => w.weight_kg)).toEqual([181]);
+    expectNoLeak(junk);
+  });
+
+  it("--drop-weights deletes through the session and says the change log keeps no weight", async () => {
+    const r = rig();
+    expect(await runSeed(opts({ "drop-weights": "3" }), r.deps)).toEqual({ ok: true });
+    expect(r.calls).toEqual(["signIn", "dropWeights:3"]);
+    expect(r.text()).toContain("Deleted 3 weight entries");
+    expect(r.text()).toContain("only that one was removed");
+    const one = rig({ session: { dropWeights: async () => 1 } });
+    await runSeed(opts({ "drop-weights": "1" }), one.deps);
+    expect(one.text()).toContain("Deleted 1 weight entry");
+    const all = rig();
+    await runSeed(opts({ "drop-weights": "all" }), all.deps);
+    expect(all.calls).toEqual(["signIn", "dropWeights:all"]);
+    const both = rig();
+    await runSeed(opts({ "drop-weights": "2", "drop-meals": "1" }), both.deps);
+    expect(both.calls).toEqual(["signIn", "dropMeals:1", "dropWeights:2"]);
+    for (const x of [r, one, all, both]) expectNoLeak(x);
+  });
+
+  it("--drop-weights never creates a user and never seeds", async () => {
+    const r = rig({ signIn: async () => ({ ok: false, code: "invalid_credentials" }) });
+    expect(await runSeed(opts({ "drop-weights": "1" }), r.deps)).toEqual({ ok: false, code: "sign_in_failed" });
+    expect(r.calls).not.toContain("createUser");
+    expectNoLeak(r);
+  });
+
+  it("a failing write is a short code and nothing of the error", async () => {
+    const boom = async () => {
+      throw new Error(`blew up: ${PASSWORD} ${ADMIN_KEY} ${JWT} ${USER_ID} C:\app\.env.local`);
+    };
+    const write = rig({ session: { upsertWeights: boom } });
+    expect(await runSeed(opts({ scenario: "w-down" }), write.deps)).toEqual({ ok: false, code: "weights_failed" });
+    const drop = rig({ session: { dropWeights: boom } });
+    expect(await runSeed(opts({ "drop-weights": "2" }), drop.deps)).toEqual({ ok: false, code: "drop_failed" });
+    expectNoLeak(write);
+    expectNoLeak(drop);
+  });
+
+  it("the refusals of the guard hold for the weight modes: a hosted stack and a real e-mail change nothing", async () => {
+    const hosted = rig({ stack: { apiUrl: "https://abcdefghijklmnopqrst.supabase.co", publishableKey: PUBLISHABLE_KEY } });
+    expect(await runSeed(opts({ scenario: "w-down" }), hosted.deps)).toEqual({ ok: false, code: "not_local_stack" });
+    expect(hosted.calls).toEqual([]);
+    const real = rig();
+    expect(await runSeed({ ...opts({ "drop-weights": "all" }), email: "someone@example.com" }, real.deps)).toEqual({ ok: false, code: "bad_email_suffix" });
+    expect(real.calls).toEqual([]);
+    expect(real.text()).not.toContain("someone@example.com");
+  });
+
+  it("--explain after a weight run is asked at the clock the run wrote", async () => {
+    let explainedAt: Date | null = null;
+    const r = rig({
+      session: {
+        async explain(a) {
+          explainedAt = a.now;
+          return CLEAN_FACTS();
+        },
+      },
+    });
+    await runSeed(opts({ scenario: "w-milestone", explain: true }), r.deps);
+    expect(explainedAt).toEqual(new Date("2026-10-28T07:00:00.000Z"));
+    expectNoLeak(r);
+  });
+});
+
 /** A session object that records into the given rig. */
 function stubSession(r: Rig): DbSession {
   return {
@@ -244,6 +356,8 @@ function stubSession(r: Rig): DbSession {
     listPeriods: async () => [],
     upsertMeals: async (rows) => (r.calls.push("upsertMeals"), rows.length),
     dropMeals: async () => 0,
+    upsertWeights: async (rows) => (r.calls.push("upsertWeights"), rows.length),
+    dropWeights: async () => 0,
     explain: async () => CLEAN_FACTS(),
   };
 }

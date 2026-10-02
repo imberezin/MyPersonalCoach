@@ -3,8 +3,9 @@ import type { SeedOptions } from "./args";
 import { formatClockInstant, shiftInstant } from "./clockfile";
 import { formatExplain, type ExplainFacts } from "./explain";
 import { assertSeedTarget } from "./guard";
-import { buildSeedPlan, periodBeforeMeal, resolveAsOf, resolveRelative, startedAtOf, toMealRow, toProfileUpdate } from "./plan";
+import { buildSeedPlan, firstWeekEndedAtOf, periodBeforeMeal, resolveAsOf, resolveRelative, startedAtOf, toMealRow, toProfileUpdate } from "./plan";
 import { seedShabbatRows, seedShabbatSeries, toPlanShabbat } from "./shabbat";
+import { toWeightRow } from "./weights";
 
 /**
  * The runner, with every outside thing injected (the Docker stack, the Auth API, the database, the clock file, the logger),
@@ -24,6 +25,7 @@ export interface StackStatus {
 
 export type ProfileUpdate = ReturnType<typeof toProfileUpdate>;
 export type MealRow = ReturnType<typeof toMealRow>;
+export type WeightEntryRow = ReturnType<typeof toWeightRow>;
 
 /** A signed-in demo user. Every call runs as that user, so row level security applies exactly as in the app. */
 export interface DbSession {
@@ -36,6 +38,10 @@ export interface DbSession {
   upsertMeals(rows: readonly MealRow[]): Promise<number>;
   /** Deletes the newest confirmed meals through RLS and returns how many went. */
   dropMeals(count: number | "all"): Promise<number>;
+  /** Inserts the weigh-ins that are not there yet (as the demo user, RLS applies) and returns how many were new. */
+  upsertWeights(rows: readonly WeightEntryRow[]): Promise<number>;
+  /** Deletes the newest weigh-ins through RLS and returns how many went. The audit trail is not touched. */
+  dropWeights(count: number | "all"): Promise<number>;
   explain(a: { now: Date; clockFile: string | null; dailyCap: number }): Promise<ExplainFacts>;
 }
 
@@ -162,10 +168,16 @@ export async function runSeed(options: SeedOptions, deps: SeedDeps): Promise<Run
         return { ok: false, code: "email_mismatch" };
       }
 
-      if (options.action === "drop" && options.dropMeals !== null) {
+      if (options.action === "drop") {
         stage = "drop";
-        const count = await session.dropMeals(options.dropMeals);
-        log(`Deleted ${count} confirmed meal${count === 1 ? "" : "s"} of ${target.email}. Patterns and evidence were not touched.`);
+        if (options.dropMeals !== null) {
+          const count = await session.dropMeals(options.dropMeals);
+          log(`Deleted ${count} confirmed meal${count === 1 ? "" : "s"} of ${target.email}. Patterns and evidence were not touched.`);
+        }
+        if (options.dropWeights !== null) {
+          const count = await session.dropWeights(options.dropWeights);
+          log(`Deleted ${count} weight entr${count === 1 ? "y" : "ies"} of ${target.email}. The change log keeps no weight, only that one was removed.`);
+        }
       } else if (options.action === "seed") {
         await seed(options, deps, session, target.email, (s) => (stage = s));
       }
@@ -239,8 +251,22 @@ async function seed(options: SeedOptions, deps: SeedDeps, session: DbSession, em
   });
   const created = await session.upsertMeals(rows);
 
+  // Only a run that asked for weigh-ins touches weight_entries at all.
+  let weightsCreated = 0;
+  if (plan.weights.length > 0) {
+    stage("weights");
+    weightsCreated = await session.upsertWeights(plan.weights.map(toWeightRow));
+  }
+
   deps.log(`Seeded ${email}: ${plan.meals.length} meals planned (${created} new), ${periods} Shabbat periods, ${resolved.goals.length} goals.`);
   deps.log(`First Week began ${formatClockInstant(plan.startedAt, resolved.timeZone)}.`);
+  if (resolved.lifecycle === "weekly_cycle") {
+    const ended = firstWeekEndedAtOf(resolved, plan.startedAt);
+    deps.log(`Lifecycle: WEEKLY_CYCLE; the First Week ended ${ended === null ? "never" : formatClockInstant(ended, resolved.timeZone)}.`);
+  }
+  if (resolved.weights !== "none" || resolved.junkWeights) {
+    deps.log(`Weights: ${plan.weights.length} planned (${weightsCreated} new), start ${resolved.startWeightKg} kg, ${resolved.goalWeightKg === null ? "no goal weight" : `goal ${resolved.goalWeightKg} kg`}.`);
+  }
 
   stage("clock");
   if (resolved.mode === "fixed" && !resolved.clockOff) {

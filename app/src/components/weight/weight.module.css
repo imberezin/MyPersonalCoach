@@ -1,0 +1,220 @@
+/* Weight reporting: the entry and edit form, the Saved card, "My weights" and the inline delete question. Tokens only
+   (tests/design/tokens.test.ts): text colors are limited to the readable text tokens, and the brand colors are used for
+   backgrounds and borders. Logical properties throughout, so one stylesheet serves Hebrew (RTL) and English (LTR).
+   A number is never a judgment: nothing here changes with a weight, and nothing is red, coral, orange or animated. */
+
+/* ---- Screen basics (the flow's centered column comes from the layout) ---- */
+
+.screen {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.lead {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-lg);
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.stack p {
+  margin: 0;
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: stretch;
+}
+
+/* ---- The form ---- */
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
+
+/* The number and its unit side by side; the unit is text, so a screen reader hears it with the label. */
+.weightRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.weightRow .input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.unit {
+  flex: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+}
+
+.input,
+.select {
+  inline-size: 100%;
+  min-block-size: var(--tap-target);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  /* 16 px or more, so iOS never zooms the page when a field takes focus. */
+  font-size: var(--font-size-body);
+}
+
+/* A field that needs a look is marked by a thicker, darker edge as well as by its words, never by color alone. */
+.input[aria-invalid="true"],
+.select[aria-invalid="true"] {
+  border-width: 2px;
+  border-color: var(--color-text-primary);
+}
+
+/* The replies to what was typed: the Message primitive carries the soft look, this only stacks them. */
+.replies {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.replies:focus,
+.replies:focus-visible {
+  outline: none;
+}
+
+/* ---- The Saved card ---- */
+
+.saved {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ---- "My weights" ---- */
+
+.list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A subtle bordered card with a very light shadow (Brand sections 14 and 16); the weight on top, its controls below. */
+.row {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  color: var(--color-text-primary);
+}
+
+.rowText {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.rowText p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.rowWhen {
+  font-weight: 600;
+}
+
+.rowKg {
+  font-size: var(--font-size-body-lg);
+}
+
+.rowNote {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* Where we started: a quiet last line, no buttons. */
+.start {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding-inline: var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+/* ---- The notice after a delete: it takes focus, but it is a message, not a control, so no ring ---- */
+
+.notice:focus,
+.notice:focus-visible {
+  outline: none;
+}
+
+/* ---- The empty and unavailable cards ---- */
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-h2);
+}
+
+/* ---- The inline question: a neutral sand inset in the place of the Delete button ---- */
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--radius-lg);
+  background: var(--color-secondary-light);
+  color: var(--color-text-primary);
+}
+
+/* The heading takes focus when the question opens (for screen readers); it is not a control, so no ring. */
+.panelTitle {
+  margin: 0;
+  font-size: var(--font-size-h3);
+}
+
+.panelTitle:focus,
+.panelTitle:focus-visible {
+  outline: none;
+}
+
+.panelBody {
+  margin: 0;
+}
+
+.panelForm {
+  display: grid;
+}
+
+/* Keep and Delete stacked, full width, with a gap between them, so one thumb slip cannot hit both. */
+.panelActions {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: stretch;
+}

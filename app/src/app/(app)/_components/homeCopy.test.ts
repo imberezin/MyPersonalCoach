@@ -34,6 +34,8 @@ const STATES: Array<[string, HomeState]> = [
   ["summary ready, little data", { key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: false }],
   ["welcome back", { key: "FIRST_WEEK_WELCOME_BACK" }],
   ["Early Signal", { key: "EARLY_SIGNAL", signal: "late_evening_meals" }],
+  ["a landmark", { key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: false }],
+  ["the goal", { key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: true }],
   ["nothing to say", { key: "SILENCE", reason: "NOTHING_TO_SAY" }],
   ["Shabbat in progress", { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" }],
   ["a holiday in progress", { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" }],
@@ -80,6 +82,8 @@ describe("homeCopyFor", () => {
           copy.earlySignal?.confirm,
           copy.earlySignal?.unsure,
           copy.earlySignal?.reject,
+          copy.milestone?.cta,
+          copy.milestone?.ackLabel,
           copy.degradedNote,
         ]
           .join("\n")
@@ -131,7 +135,7 @@ describe("homeCopyFor", () => {
               ? { lead: null, cta: (state.hadEnoughData ? words.firstWeekSummaryReady : words.firstWeekSummaryReadyLittle).cta, snoozeLabel: words.firstWeekSnooze }
               : state.key === "FIRST_WEEK_WELCOME_BACK"
                 ? { lead: words.firstWeekWelcomeBack.lead, cta: words.firstWeekWelcomeBack.cta, snoozeLabel: words.firstWeekSnooze }
-                : state.key === "EARLY_SIGNAL"
+                : state.key === "EARLY_SIGNAL" || state.key === "MILESTONE_REACHED"
                   ? null
                   : { lead, cta, snoozeLabel: null };
         expect(snoozeCards.has(state.key) === (expected?.snoozeLabel != null), name).toBe(true);
@@ -334,6 +338,65 @@ describe("homeCopyFor", () => {
         expect(new Set(values).size).toBe(3);
         for (const value of values) expect(value.trim()).not.toBe("");
       }
+    });
+  });
+
+  describe("the landmark card", () => {
+    const REACHED: HomeState = { key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: false };
+    const GOAL: HomeState = { key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: true };
+    const OPEN: HomeAction = { kind: "OPEN_PROGRESS", week: "2026-10-18" };
+
+    it.each(LOCALES)("%s: the landmark and the goal each have their own title and body, and no emoji", (locale) => {
+      const words = homeText[locale];
+      const format = { locale, timeZone: "Asia/Jerusalem" };
+      const landmark = homeCopyFor(decision(REACHED, { action: OPEN }), translator(locale), format);
+      const goal = homeCopyFor(decision(GOAL, { action: OPEN }), translator(locale), format);
+      expect([landmark.title, landmark.body]).toEqual([words.milestoneReached.title, words.milestoneReached.body]);
+      expect([goal.title, goal.body]).toEqual([words.milestoneGoalReached.title, words.milestoneGoalReached.body]);
+      expect(landmark.title).not.toBe(goal.title);
+      expect(landmark.emoji).toBeNull();
+      expect(goal.emoji).toBeNull();
+      expect(landmark.lead).toBeNull();
+    });
+
+    it.each(LOCALES)("%s: carries its own two buttons, and no invitation", (locale) => {
+      const words = homeText[locale];
+      for (const state of [REACHED, GOAL]) {
+        const copy = homeCopyFor(decision(state, { action: OPEN }), translator(locale), { locale, timeZone: "UTC" });
+        expect(copy.milestone).toEqual({ cta: words.milestoneCta, ackLabel: words.milestoneAck });
+        expect(copy.invitation).toBeNull();
+        expect(copy.earlySignal).toBeNull();
+      }
+    });
+
+    it("gives the two buttons to that state only", () => {
+      const t = translator("he");
+      for (const [name, other] of STATES) {
+        expect(homeCopyFor(decision(other, { action: ACTION }), t, FORMAT).milestone === null, name).toBe(other.key !== "MILESTONE_REACHED");
+      }
+    });
+
+    it("says the spec's words in Hebrew", () => {
+      const t = translator("he");
+      expect(homeCopyFor(decision(REACHED, { action: OPEN }), t, FORMAT).title).toBe("הגעת לאבן דרך");
+      expect(homeCopyFor(decision(GOAL, { action: OPEN }), t, FORMAT).title).toBe("הגעת למשקל שאליו כיוונת");
+      expect(homeCopyFor(decision(REACHED, { action: OPEN }), t, FORMAT).milestone).toEqual({ cta: "להתקדמות", ackLabel: "תודה" });
+    });
+
+    it("shows no number at all, in either language: Home is glanced at in public", () => {
+      for (const locale of LOCALES) {
+        for (const state of [REACHED, GOAL]) {
+          const copy = homeCopyFor(decision(state, { action: OPEN }), translator(locale), { locale, timeZone: "UTC" });
+          const text = [copy.title, copy.lead, copy.body, copy.milestone?.cta, copy.milestone?.ackLabel].join("\n");
+          expect(text, locale).not.toMatch(/\d|!|%|kg|ק"ג/i);
+        }
+      }
+    });
+
+    it("still says the calm note when a fact was unknown", () => {
+      const copy = homeCopyFor(decision(REACHED, { action: OPEN, degraded: true }), translator("he"), FORMAT);
+      expect(copy.degradedNote).toBe(homeText.he.degraded);
+      expect(copy.milestone).not.toBeNull();
     });
   });
 

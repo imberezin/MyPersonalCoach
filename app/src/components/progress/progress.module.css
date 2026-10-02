@@ -1,0 +1,218 @@
+/* The Progress screen (weight trend, landmarks, what was noticed) and the landmark card's buttons on Home. Tokens only
+   (tests/design/tokens.test.ts): text colors are limited to the readable text tokens, and the brand colors are used for
+   backgrounds, borders and the chart's strokes. Logical properties throughout, so one stylesheet serves Hebrew (RTL) and
+   English (LTR).
+
+   A color is a judgment if it changes with the number. Nothing here depends on the direction of a change, the sign of a
+   difference or a threshold: the line, the dots and the list look the same for every series, and the sheet refers to no
+   token of the error, accent, attention or warning families (progress.css.test.ts reads it). Nothing moves or fades: the
+   screen is read, not watched. */
+
+/* ---- The page: a heading, then one card per part ---- */
+
+.page {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.heading {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.heading p {
+  margin: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-h2);
+}
+
+.lead {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-lg);
+}
+
+.cardBody {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cardBody p {
+  margin: 0;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--font-size-h3);
+}
+
+.note {
+  color: var(--color-text-secondary);
+}
+
+.links {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: stretch;
+}
+
+/* ---- The weekly line: inline SVG, always read left to right (the wrapper sets dir="ltr") ---- */
+
+.chart {
+  inline-size: 100%;
+}
+
+.chartSvg {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.line {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dot {
+  fill: var(--color-primary);
+  stroke: var(--color-surface);
+  stroke-width: 1.5;
+}
+
+.baseline {
+  fill: none;
+  stroke: var(--color-text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.axis {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.axisLabel {
+  fill: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  dominant-baseline: central;
+}
+
+/* The word "Start" sits on the dashed line; a halo of the card's own color keeps it readable where the line passes. */
+.baselineLabel {
+  fill: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  paint-order: stroke;
+  stroke: var(--color-surface);
+  stroke-width: 4;
+}
+
+.dateLabel {
+  fill: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+/* ---- "Show the numbers" ---- */
+
+.numbers summary {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--tap-target);
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.numbersList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- Landmarks: marks and words only. No counter, no distance, no percentage ---- */
+
+.milestones {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.milestone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Decorative (aria-hidden). Filled for a landmark reached, an outline for the next, a thin outline for those ahead; the
+   shapes differ, so nothing is told by color alone. */
+.mark {
+  flex: none;
+  box-sizing: border-box;
+  inline-size: 1rem;
+  block-size: 1rem;
+  border-radius: var(--radius-pill);
+}
+
+.markReached {
+  background: var(--color-primary);
+  border: 2px solid var(--color-primary);
+}
+
+.markNext {
+  background: transparent;
+  border: 2px solid var(--color-primary);
+}
+
+.markAhead {
+  background: transparent;
+  border: 1px solid var(--color-border);
+}
+
+.milestoneKg {
+  font-weight: 600;
+}
+
+.milestoneWord {
+  color: var(--color-text-secondary);
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- What we noticed ---- */
+
+.experimentText {
+  font-size: var(--font-size-body);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Home: the landmark card's primary link with its quiet "Thanks", in one column ---- */
+
+.homeActions {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: stretch;
+  inline-size: min(100%, 20rem);
+}
+
+.homeActions form {
+  display: grid;
+}
