@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { localDayOf, localMinuteOfDay, tzOffsetMs, zonedInstantUtc, zonedMidnightUtc } from "./time";
+import { DEFAULT_TIME_ZONE } from "@/i18n/config";
+import { HOME_FALLBACK_TIME_ZONE, resolveTimeZone as resolveTimeZoneFromHome } from "./home";
+import { localDayOf, localMinuteOfDay, resolveTimeZone, tzOffsetMs, zonedInstantUtc, zonedMidnightUtc } from "./time";
 
 const TZ = "Asia/Jerusalem";
 const HOUR = 3_600_000;
@@ -128,5 +131,62 @@ describe("zonedInstantUtc", () => {
 
   it("works for a zone without daylight saving time", () => {
     expect(zonedInstantUtc(2027, 3, 26, 2, 30, "UTC").toISOString()).toBe("2027-03-26T02:30:00.000Z");
+  });
+});
+
+describe("resolveTimeZone (moved here from home/resolve so nothing below home/ imports it)", () => {
+  it.each(["UTC", "Asia/Jerusalem", "America/New_York"])("returns the valid zone %s unchanged", (tz) => {
+    expect(resolveTimeZone(tz)).toBe(tz);
+  });
+
+  it.each(["Not/AZone", "", " ", "Jerusalem", "<script>"])("falls back to Jerusalem for %j", (tz) => {
+    expect(resolveTimeZone(tz)).toBe("Asia/Jerusalem");
+  });
+
+  it("falls back for values that are not strings at all (the column is untyped at run time)", () => {
+    for (const bad of [undefined, null, 42, {}]) expect(resolveTimeZone(bad as unknown as string)).toBe("Asia/Jerusalem");
+  });
+
+  it("uses the same fallback as Home and the rest of the app", () => {
+    expect(resolveTimeZone("garbage")).toBe(HOME_FALLBACK_TIME_ZONE);
+    expect(resolveTimeZone("garbage")).toBe(DEFAULT_TIME_ZONE);
+  });
+
+  it("is still exported by @/domain/home, the same function", () => {
+    expect(resolveTimeZoneFromHome).toBe(resolveTimeZone);
+  });
+});
+
+describe("no import cycle below home/", () => {
+  const importsOf = (relative: string): string[] => {
+    const source = readFileSync(new URL(relative, import.meta.url), "utf8");
+    return [...source.matchAll(/from\s+["']([^"']+)["']/g)].map((m) => m[1]);
+  };
+
+  it.each(["./firstWeekFlow/progress.ts", "./patterns/detect.ts"])("%s does not import home/", (file) => {
+    const imports = importsOf(file);
+    expect(imports.length).toBeGreaterThan(0);
+    for (const specifier of imports) expect(specifier).not.toMatch(/(^|\/)home(\/|$)/);
+  });
+
+  it("nothing in firstWeekFlow/, patterns/ or experiments/ imports home/, lib/ or the UI", () => {
+    for (const file of [
+      "./firstWeekFlow/types.ts",
+      "./firstWeekFlow/progress.ts",
+      "./firstWeekFlow/snooze.ts",
+      "./firstWeekFlow/acknowledgement.ts",
+      "./firstWeekFlow/summary.ts",
+      "./patterns/types.ts",
+      "./patterns/detect.ts",
+      "./patterns/status.ts",
+      "./patterns/earlySignal.ts",
+      "./experiments/types.ts",
+      "./experiments/map.ts",
+      "./experiments/select.ts",
+    ]) {
+      for (const specifier of importsOf(file)) {
+        expect(specifier, `${file} imports ${specifier}`).not.toMatch(/(^|\/)home(\/|$)|^@\//);
+      }
+    }
   });
 });

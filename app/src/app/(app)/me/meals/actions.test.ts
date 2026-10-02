@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   track: vi.fn(),
   logAppError: vi.fn(),
   revalidatePath: vi.fn(),
+  // The development clock and the end-of-delete pattern refresh (First Week, Phase 2).
+  currentInstant: vi.fn(),
+  refreshPatterns: vi.fn(),
   // Deleting is not reporting: if any code path of the action ever asks about offline periods, this throws.
   loadOfflinePeriods: vi.fn(() => {
     throw new Error("OFFLINE_PERIODS_READ");
@@ -37,6 +40,8 @@ vi.mock("@/lib/food/repo", () => ({ deleteMealEntry: mocks.deleteMealEntry }));
 vi.mock("@/lib/ai/ledger", () => ({ logAppError: mocks.logAppError }));
 vi.mock("@/lib/analytics/track", () => ({ track: mocks.track, SupabaseEventsSink: class {} }));
 vi.mock("@/lib/home/load", () => ({ loadOfflinePeriods: mocks.loadOfflinePeriods }));
+vi.mock("@/lib/clock/now", () => ({ currentInstant: mocks.currentInstant }));
+vi.mock("@/lib/patterns/refresh", () => ({ refreshPatternsAfterMealChange: mocks.refreshPatterns }));
 
 const supabase = { tag: "user-client" };
 const ready = (lifecycle_state = "FIRST_WEEK") => ({
@@ -74,6 +79,8 @@ beforeEach(() => {
   mocks.deleteMealEntry.mockReset().mockResolvedValue({ ok: true, value: { deleted: true } });
   mocks.track.mockReset().mockResolvedValue(undefined);
   mocks.logAppError.mockReset().mockResolvedValue(undefined);
+  mocks.currentInstant.mockReset().mockReturnValue(new Date("2026-09-16T06:00:00Z"));
+  mocks.refreshPatterns.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal("crypto", { randomUUID: () => TOKEN });
   for (const method of ["log", "info", "warn", "error"] as const) vi.spyOn(console, method).mockImplementation(() => {});
 });
@@ -147,6 +154,35 @@ describe("deleteMealAction", () => {
       const query = new URL(url, "https://example.test").searchParams;
       expect([...query.keys()].sort()).toEqual(["n", "notice", "pages"]);
       expect(url).not.toContain(ID);
+    });
+  });
+
+  describe("the pattern refresh after a real delete (First Week, Phase 2)", () => {
+    it("runs once, with the ready context and the app's clock, after the meal_deleted event", async () => {
+      await outcome(() => deleteMealAction(deleteForm()));
+      expect(mocks.refreshPatterns).toHaveBeenCalledTimes(1);
+      expect(mocks.refreshPatterns).toHaveBeenCalledWith(mocks.context.current, new Date("2026-09-16T06:00:00Z"));
+      expect(mocks.track.mock.invocationCallOrder[0]).toBeLessThan(mocks.refreshPatterns.mock.invocationCallOrder[0]);
+      expect(mocks.refreshPatterns.mock.invocationCallOrder[0]).toBeLessThan(mocks.revalidatePath.mock.invocationCallOrder[0]);
+    });
+
+    it("does not run when the meal was already gone", async () => {
+      mocks.deleteMealEntry.mockResolvedValue({ ok: true, value: { deleted: false } });
+      await outcome(() => deleteMealAction(deleteForm()));
+      expect(mocks.refreshPatterns).not.toHaveBeenCalled();
+    });
+
+    it("does not run when the delete could not be confirmed", async () => {
+      mocks.deleteMealEntry.mockResolvedValue({ ok: false, code: "unavailable" });
+      await outcome(() => deleteMealAction(deleteForm()));
+      expect(mocks.refreshPatterns).not.toHaveBeenCalled();
+    });
+
+    it("changes neither the notice nor the landing when the refresh rejects", async () => {
+      mocks.refreshPatterns.mockRejectedValue(new Error("boom"));
+      await expect(outcome(() => deleteMealAction(deleteForm({ [MEALS_FORM.pages]: "2" })))).resolves.toBe(landing("deleted", TOKEN, 2));
+      expect(mocks.track).toHaveBeenCalledTimes(1);
+      expect(mocks.revalidatePath).toHaveBeenCalledWith("/", "layout");
     });
   });
 

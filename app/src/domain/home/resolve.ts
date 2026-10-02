@@ -1,7 +1,10 @@
+import { decideFirstWeekStep, welcomeBackDue } from "../firstWeekFlow/progress";
+import { FIRST_WEEK_FLOW } from "../firstWeekFlow/types";
 import { isOffline, type OfflinePeriod } from "../offline";
-import { localMinuteOfDay } from "../time";
+import { LATE_EVENING, PATTERN_FLOW } from "../patterns/types";
+import { isQuiet } from "../quietHours";
+import { localMinuteOfDay, resolveTimeZone } from "../time";
 import {
-  HOME_FALLBACK_TIME_ZONE,
   HOME_FEATURES,
   HOME_TIMING,
   type HomeAction,
@@ -23,21 +26,9 @@ export function homePeriodsWindow(now: Date): { from: Date; to: Date } {
   };
 }
 
-/**
- * Returns `tz` when `new Intl.DateTimeFormat("en-US", { timeZone: tz })` accepts it, else
- * HOME_FALLBACK_TIME_ZONE. Never throws. Used by the resolver, the loader and `homeCopyFor`, so a
- * garbage `profiles.timezone` (a `text not null` column with no check constraint) can never reach
- * an Intl call unvalidated.
- */
-export function resolveTimeZone(tz: string): string {
-  if (typeof tz !== "string") return HOME_FALLBACK_TIME_ZONE;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: tz });
-    return tz;
-  } catch {
-    return HOME_FALLBACK_TIME_ZONE;
-  }
-}
+// `resolveTimeZone` lives in ../time (below home/, firstWeekFlow/ and patterns/, so none of them imports another to
+// reach it). It is re-exported here because the loader, `homeCopyFor` and the AI allowance import it from this module.
+export { resolveTimeZone } from "../time";
 
 /** True when `now - renderedAt >= staleAfterMs`. Pure; both arguments are epoch ms on the SAME (client) clock. */
 export function isHomeStale(renderedAt: number, now: number, staleAfterMs: number): boolean {
@@ -75,12 +66,10 @@ function shabbatJustEnded(periods: readonly OfflinePeriod[], now: Date): Offline
   return found;
 }
 
-function resolveState(
-  now: Date,
-  timeZone: string,
-  periods: readonly OfflinePeriod[] | null,
-  hasAnyReport: boolean | null,
-): HomeState {
+function resolveState(facts: HomeFacts, timeZone: string): HomeState {
+  const { now, offlinePeriods: periods, hasAnyReport, lifecycle, firstWeekSnoozed } = facts;
+  const inFirstWeek = lifecycle === "FIRST_WEEK";
+
   // Without the periods Shabbat is unknown: rules 1-3 are skipped and the clock decides alone.
   if (periods) {
     const inProgress = periodInProgress(periods, now);
@@ -93,14 +82,56 @@ function resolveState(
     if (ended) return { key: "MOTZEI_SHABBAT", havdalah: ended.end };
   }
 
+  // The First Week cards. Every one needs lifecycle FIRST_WEEK and a loaded fact: an unknown fact is silence, so
+  // another lifecycle (or a stale non-null fact) can never create one of them. The step the rules are at is derived
+  // from live counts here, never stored.
+  const step = inFirstWeek && facts.firstWeek !== null ? decideFirstWeekStep(facts.firstWeek) : null;
+  const summaryReady = FIRST_WEEK_FLOW.summaryEnabled && step?.kind === "SUMMARY_READY";
+
+  // The summary and the welcome-back are about the person's week and each carries its own "Not now".
+  // The summary beats the welcome-back (decideFirstWeekStep), and both beat B1.
+  if (summaryReady && step?.kind === "SUMMARY_READY" && !firstWeekSnoozed.summary) {
+    return { key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: step.hadEnoughData };
+  }
+  // Decided from the counts, not from `step`: with the summary switched off, `step` would still say SUMMARY_READY
+  // and hide the welcome-back that its own switch allows. A summary that is ready but snoozed still beats it.
+  const summaryDue = step?.kind === "SUMMARY_READY";
+  if (
+    FIRST_WEEK_FLOW.welcomeBackEnabled &&
+    inFirstWeek &&
+    facts.firstWeek !== null &&
+    !(FIRST_WEEK_FLOW.summaryEnabled && summaryDue) &&
+    welcomeBackDue(facts.firstWeek) &&
+    !firstWeekSnoozed.welcomeBack
+  ) {
+    return { key: "FIRST_WEEK_WELCOME_BACK" };
+  }
+
+  const minute = localMinuteOfDay(now, timeZone);
+
+  // B4 Early Signal: a smaller, optional question. It sits below the two cards above (an unanswered B4 must not hide
+  // the summary forever) and above the clock states. Shown only when the data says it is due, the quiet hours are
+  // KNOWN and the clock is outside them, and before the signal's own hours: pointing at the evening during the
+  // evening would read as a remark about what the person is doing now.
+  const earlySignalShown =
+    PATTERN_FLOW.earlySignalEnabled &&
+    inFirstWeek &&
+    facts.earlySignal?.due === true &&
+    facts.quietHours !== null &&
+    !isQuiet(facts.quietHours, minute) &&
+    minute < LATE_EVENING.startMinute;
+  if (earlySignalShown) return { key: "EARLY_SIGNAL", signal: LATE_EVENING.kind };
+
   // B1 First Week Start: nothing reported yet. It is content on the screen, not a notification, so it
-  // holds at any hour. Only a known "no report" counts (null is unknown), and only while the
-  // invitation is switched on, because its one button is that invitation.
-  if (HOME_FEATURES.firstReportInvitation && hasAnyReport === false) return { key: "FIRST_WEEK_START" };
+  // holds at any hour. Only a known "no report" counts (null is unknown), only in FIRST_WEEK (a person who deleted
+  // every meal after the transition is never sent back to "our first week"), only while the invitation is
+  // switched on (its one button is that invitation), and never in place of a summary that is ready but snoozed.
+  if (HOME_FEATURES.firstReportInvitation && inFirstWeek && hasAnyReport === false && !summaryReady) {
+    return { key: "FIRST_WEEK_START" };
+  }
 
   // The windows above use stored instants, so a DST day cannot move them. Only these two cut-offs
   // are wall-clock times.
-  const minute = localMinuteOfDay(now, timeZone);
   if (minute >= HOME_TIMING.eveningStartMinute) return { key: "EVENING" };
   if (minute >= HOME_TIMING.morningStartMinute && minute < HOME_TIMING.morningEndMinute) return { key: "MORNING" };
   return { key: "SILENCE", reason: "NOTHING_TO_SAY" };
@@ -115,6 +146,11 @@ function invitesFirstReport(state: HomeState): boolean {
     case "MOTZEI_SHABBAT":
     case "FIRST_WEEK_START":
       return true;
+    case "FIRST_WEEK_SUMMARY_READY":
+    case "FIRST_WEEK_WELCOME_BACK":
+    case "EARLY_SIGNAL":
+      // They carry their own action (resolveAction), never the first-report invitation.
+      return false;
     case "SILENCE":
       // Silence is a complete state: it never carries an action.
       return false;
@@ -124,14 +160,25 @@ function invitesFirstReport(state: HomeState): boolean {
 }
 
 function resolveAction(state: HomeState, hasAnyReport: boolean | null): HomeAction | null {
+  // The three First Week states carry their own action, whatever the report fact says.
+  switch (state.key) {
+    case "FIRST_WEEK_SUMMARY_READY":
+      return { kind: "OPEN_FIRST_WEEK_SUMMARY" };
+    case "FIRST_WEEK_WELCOME_BACK":
+      return { kind: "OPEN_REPORT_SHEET", reason: "WELCOME_BACK" };
+    case "EARLY_SIGNAL":
+      return { kind: "ANSWER_EARLY_SIGNAL" };
+    default:
+      break;
+  }
   // Unknown (null) means no invitation: better to say nothing than to invite someone who already reported.
   if (!HOME_FEATURES.firstReportInvitation || hasAnyReport !== false) return null;
   return invitesFirstReport(state) ? { kind: "OPEN_REPORT_SHEET", reason: "FIRST_REPORT" } : null;
 }
 
 /**
- * Pure, total, never throws. Precedence: offline > before Shabbat > Motzei Shabbat > first week start >
- * evening > morning > silence.
+ * Pure, total, never throws. Precedence: offline > before Shabbat > Motzei Shabbat > First Week summary ready >
+ * First Week welcome back > Early Signal > first week start > evening > morning > silence.
  */
 export function resolveHome(facts: HomeFacts): HomeDecision {
   // An invalid instant cannot be formatted at all; say nothing rather than throw.
@@ -139,11 +186,15 @@ export function resolveHome(facts: HomeFacts): HomeDecision {
     return { state: { key: "SILENCE", reason: "NOTHING_TO_SAY" }, action: null, degraded: true };
   }
 
-  const state = resolveState(facts.now, resolveTimeZone(facts.timeZone), facts.offlinePeriods, facts.hasAnyReport);
+  const state = resolveState(facts, resolveTimeZone(facts.timeZone));
   return {
     state,
     action: resolveAction(state, facts.hasAnyReport),
-    degraded: facts.offlinePeriods === null || facts.hasAnyReport === null,
+    // An unknown earlySignal or quietHours does NOT degrade Home: the card is a bonus, not a fact Home needs.
+    degraded:
+      facts.offlinePeriods === null ||
+      facts.hasAnyReport === null ||
+      (facts.lifecycle === "FIRST_WEEK" && facts.firstWeek === null),
   };
 }
 
@@ -160,6 +211,18 @@ export function homeCopyKey(state: HomeState): HomeCopyKey {
       return "motzeiShabbat";
     case "FIRST_WEEK_START":
       return "firstWeekStart";
+    case "FIRST_WEEK_SUMMARY_READY":
+      // Fewer than the meals the rules ask for, or none: no claim of familiarity.
+      return state.hadEnoughData ? "firstWeekSummaryReady" : "firstWeekSummaryReadyLittle";
+    case "FIRST_WEEK_WELCOME_BACK":
+      return "firstWeekWelcomeBack";
+    case "EARLY_SIGNAL":
+      switch (state.signal) {
+        case "late_evening_meals":
+          return "earlySignalLateEvening";
+        default:
+          return state.signal satisfies never;
+      }
     case "SILENCE":
       switch (state.reason) {
         case "NOTHING_TO_SAY":

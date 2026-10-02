@@ -59,7 +59,7 @@ const OWNED_TABLES: Array<{ table: string; insert?: string }> = [
   { table: "patterns", insert: "insert into public.patterns (kind) values ('evening_fatigue_and_hunger')" },
   { table: "pattern_evidence", insert: "insert into public.pattern_evidence (pattern_id, observed_at) select id, now() from public.patterns limit 1" },
   { table: "intervention_instances", insert: "insert into public.intervention_instances (intervention_key, variant, level, context, proactive) values ('pause', 'before_second_portion', 2, 'CRAVING', true)" },
-  { table: "experiments", insert: "insert into public.experiments (intervention_key, status) values ('pause', 'ACTIVE')" },
+  { table: "experiments", insert: "insert into public.experiments (intervention_key, status, started_at) values ('pause', 'ACTIVE', now())" },
   { table: "weekly_summaries", insert: "insert into public.weekly_summaries (week_start, opening_mode) values (current_date, 'LEARN')" },
   { table: "push_subscriptions", insert: "insert into public.push_subscriptions (endpoint, p256dh, auth) values ('https://push.example/abc', 'k', 'a')" },
 ];
@@ -184,14 +184,14 @@ describe("integrity rules", () => {
   it("allows at most one active experiment per user", async () => {
     await expect(
       as("authenticated", USER_A, () =>
-        db.query("insert into public.experiments (intervention_key, status) values ('delay', 'ACTIVE')"),
+        db.query("insert into public.experiments (intervention_key, status, started_at) values ('delay', 'ACTIVE', now())"),
       ),
     ).rejects.toThrow(/duplicate key|unique/);
   });
 
   it("allows a finished experiment next to the active one", async () => {
     await as("authenticated", USER_A, () =>
-      db.query("insert into public.experiments (intervention_key, status) values ('delay', 'DONE')"),
+      db.query("insert into public.experiments (intervention_key, status, started_at) values ('delay', 'DONE', now())"),
     );
   });
 

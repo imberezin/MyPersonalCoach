@@ -16,6 +16,7 @@ const copy = (over: Partial<HomeCopy> = {}): HomeCopy => ({
   lead: null,
   body: "A sentence.",
   invitation: null,
+  earlySignal: null,
   degradedNote: null,
   ...over,
 });
@@ -44,10 +45,18 @@ describe("HomeCard", () => {
 
   it("renders the invitation's lead with the action under it", () => {
     const action = createElement("button", { type: "button" }, "The cta");
-    const html = render({ copy: copy({ invitation: { lead: "The lead", cta: "The cta" } }), action });
+    const html = render({ copy: copy({ invitation: { lead: "The lead", cta: "The cta", snoozeLabel: null } }), action });
     expect(html).toContain("The lead");
     expect(count(html, /<button/g)).toBe(1);
     expect(html.indexOf("The lead")).toBeLessThan(html.indexOf("<button"));
+  });
+
+  it("renders an action that has no invitation (the Early Signal answers) in the same place, with no sentence above it", () => {
+    const action = createElement("div", { role: "group" }, createElement("button", { type: "button" }, "An answer"));
+    const html = render({ copy: copy({ invitation: null }), action });
+    expect(count(html, /<button/g)).toBe(1);
+    expect(count(html, /<p[\s>]/g)).toBe(1);
+    expect(html.indexOf("A sentence.")).toBeLessThan(html.indexOf("<button"));
   });
 
   it("renders an opening line between the title and the body, and none when there is none", () => {
@@ -60,7 +69,7 @@ describe("HomeCard", () => {
 
   it("renders the button without a sentence above it when the invitation has no lead", () => {
     const action = createElement("button", { type: "button" }, "The cta");
-    const html = render({ copy: copy({ invitation: { lead: null, cta: "The cta" } }), action });
+    const html = render({ copy: copy({ invitation: { lead: null, cta: "The cta", snoozeLabel: null } }), action });
     expect(count(html, /<p[\s>]/g)).toBe(1);
     expect(count(html, /<button/g)).toBe(1);
   });
@@ -90,6 +99,10 @@ describe("HomeCard", () => {
       { key: "BEFORE_SHABBAT", candleLighting: new Date("2027-01-08T14:10:00Z") },
       { key: "MOTZEI_SHABBAT", havdalah: new Date("2027-01-09T15:25:00Z") },
       { key: "FIRST_WEEK_START" },
+      { key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: true },
+      { key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: false },
+      { key: "FIRST_WEEK_WELCOME_BACK" },
+      { key: "EARLY_SIGNAL", signal: "late_evening_meals" },
       { key: "SILENCE", reason: "NOTHING_TO_SAY" },
       { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" },
       { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" },

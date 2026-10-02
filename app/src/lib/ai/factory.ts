@@ -3,7 +3,7 @@ import { readAiConfig, usableProviders, type AiConfig } from "./config";
 import { AIGateway } from "./gateway";
 import { isAdminConfigured } from "./ledger";
 import { MEAL_PROMPT_VERSION } from "./prompts/meal";
-import { FakeAIProvider } from "./providers/fake";
+import { FakeAIProvider, parseWordingBehavior } from "./providers/fake";
 import { GeminiProvider } from "./providers/gemini";
 import { GroqProvider } from "./providers/groq";
 import type { AIProvider, AIRecorder } from "./types";
@@ -64,7 +64,9 @@ export function createAiRuntime(options: { env?: Env; nodeEnv?: string; recorder
           }),
         );
       } else if (id === "fake" && nodeEnv !== "production") {
-        providers.push(new FakeAIProvider());
+        // AI_FAKE_BEHAVIOR picks how the fake answers the experiment wording. It is read here only: never in production
+        // (the fake is refused there), and only when `fake` is in the provider order. An unknown value is ignored.
+        providers.push(new FakeAIProvider("fake", { wording: parseWordingBehavior(env.AI_FAKE_BEHAVIOR) }));
       }
     }
 

@@ -5,14 +5,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * ../onboarding/fakeSupabase.ts). It records every query and answers with whatever the test
  * configured for that table. It does not filter, order or limit: it returns the configured rows and
  * the test checks what was asked from the recorded query.
- * Only the calls the Home loader uses are supported: from().select().eq().gt().lte().order().limit(),
- * awaited.
+ * Only the calls the Home and First Week loaders use are supported:
+ * from().select().eq().neq().gt().gte().lte().order().limit(), awaited.
  */
 
 export type RecordedQuery = {
   table: string;
   columns: string;
-  filters: Array<["eq" | "gt" | "lte", string, unknown]>;
+  filters: Array<["eq" | "neq" | "gt" | "gte" | "lte", string, unknown]>;
   order?: { column: string; ascending: boolean };
   limit?: number;
 };
@@ -23,7 +23,7 @@ export type RecordedQuery = {
  */
 export type FakeTable = { rows: unknown[] } | { error: { message?: string; code?: string } } | "throw";
 
-/** from(t).select(c).eq().gt().lte().order().limit() is awaitable and answers { data, error }. */
+/** from(t).select(c).eq().neq().gt().gte().lte().order().limit() is awaitable and answers { data, error }. */
 export function createFakeReadSupabase(tables: Record<string, FakeTable>): {
   client: SupabaseClient;
   queries: RecordedQuery[];
@@ -45,8 +45,16 @@ export function createFakeReadSupabase(tables: Record<string, FakeTable>): {
           query.filters.push(["eq", column, value]);
           return builder;
         },
+        neq(column: string, value: unknown) {
+          query.filters.push(["neq", column, value]);
+          return builder;
+        },
         gt(column: string, value: unknown) {
           query.filters.push(["gt", column, value]);
+          return builder;
+        },
+        gte(column: string, value: unknown) {
+          query.filters.push(["gte", column, value]);
           return builder;
         },
         lte(column: string, value: unknown) {

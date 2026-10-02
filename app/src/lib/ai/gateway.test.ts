@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AIGateway } from "./gateway";
 import { FakeAIProvider } from "./providers/fake";
-import { ProviderError, type AiCallRecord, type AIRecorder } from "./types";
+import { ProviderError, type AiCallRecord, type AIRecorder, type InsightContext } from "./types";
 
 const mealInput = { text: "schnitzel and rice", locale: "en" as const };
 
@@ -202,5 +202,118 @@ describe("AIGateway", () => {
       expect(signal?.aborted).toBe(true);
       expect(Date.now() - started).toBeLessThan(5_000);
     });
+  });
+});
+
+describe("wordExperiment", () => {
+  const SENTENCE = "At your next meal, sit down, put it on a plate, and take a few minutes without a screen.";
+  const wording: InsightContext = {
+    locale: "en",
+    interventionKey: "eat_intentionally",
+    variantId: "default",
+    facts: { approved_text: SENTENCE, scope: "next_meal", max_chars: 180, tone: "calm" },
+  };
+
+  it("returns a typed { text } from the fake provider, with its provider and model", async () => {
+    const result = await new AIGateway([new FakeAIProvider()]).wordExperiment(wording);
+    expect(result).toMatchObject({ ok: true, provider: "fake", model: "fake-1" });
+    if (result.ok) expect(result.value).toEqual({ text: SENTENCE.replace(/.$/, "") + ", if you like." });
+  });
+
+  it("an invalid answer with retries: 0 makes ONE attempt (the default of 1 still retries the meal calls)", async () => {
+    let calls = 0;
+    const bad = new FakeAIProvider("bad", { wording: "wording_invalid" });
+    const original = bad.generateInsight.bind(bad);
+    bad.generateInsight = (context, ctx) => {
+      calls++;
+      return original(context, ctx);
+    };
+    const result = await new AIGateway([bad]).wordExperiment(wording, { retries: 0 });
+    expect(calls).toBe(1);
+    expect(result).toEqual({ ok: false, reason: "all_providers_failed", attempts: [{ provider: "bad", error: "invalid_output" }] });
+
+    calls = 0;
+    await new AIGateway([bad]).wordExperiment(wording); // the gateway default (1 retry) applies when the call does not say
+    expect(calls).toBe(2);
+  });
+
+  it("a provider that never answers hits the attempt timeout and the next provider answers", async () => {
+    const slow = new FakeAIProvider("slow", { wording: "wording_slow" });
+    const started = Date.now();
+    const result = await new AIGateway([slow, new FakeAIProvider("fast")]).wordExperiment(wording, { timeoutMs: 20, retries: 0 });
+    expect(result).toMatchObject({ ok: true, provider: "fast" });
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it("a total budget under the 2 s minimum attempt starts nothing and says budget_exhausted", async () => {
+    let calls = 0;
+    const provider = new FakeAIProvider("p");
+    const original = provider.generateInsight.bind(provider);
+    provider.generateInsight = (context, ctx) => {
+      calls++;
+      return original(context, ctx);
+    };
+    const result = await new AIGateway([provider]).wordExperiment(wording, { totalBudgetMs: 1_000, retries: 0 });
+    expect(result).toEqual({ ok: false, reason: "budget_exhausted", attempts: [] });
+    expect(calls).toBe(0);
+  });
+
+  it("the call options override the gateway's own total budget", async () => {
+    const result = await new AIGateway([new FakeAIProvider()], { totalBudgetMs: 100 }).wordExperiment(wording, { totalBudgetMs: 9_000, retries: 0 });
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it("records operation wordExperiment for every attempt (ok, invalid_output, error, timeout) and never a prompt, a text or the answer", async () => {
+    const { records, recorder } = collector();
+    const slow = new FakeAIProvider("slow", { wording: "wording_slow" });
+    const down = new FakeAIProvider("down", { wording: "wording_fail" });
+    const invalid = new FakeAIProvider("invalid", { wording: "wording_invalid" });
+    const good = new FakeAIProvider("good");
+    const result = await new AIGateway([slow, down, invalid, good], { recorder }).wordExperiment(wording, { timeoutMs: 20, retries: 0 });
+    expect(result).toMatchObject({ ok: true, provider: "good" });
+    expect(records.map((r) => [r.operation, r.provider, r.outcome])).toEqual([
+      ["wordExperiment", "slow", "timeout"],
+      ["wordExperiment", "down", "error"],
+      ["wordExperiment", "invalid", "invalid_output"],
+      ["wordExperiment", "good", "ok"],
+    ]);
+    const serialized = JSON.stringify(records);
+    expect(serialized).not.toContain("sit down");
+    expect(serialized).not.toContain("plate");
+    expect(serialized).not.toContain("approved_text");
+    // The record has no place for content at all: only these fields.
+    expect(Object.keys(records[3]).sort()).toEqual(["errorKind", "inputTokens", "latencyMs", "model", "operation", "outcome", "outputTokens", "provider"]);
+  });
+
+  it("a throwing or hanging recorder changes nothing", async () => {
+    const throwing: AIRecorder = {
+      record() {
+        throw new Error("ledger down");
+      },
+    };
+    expect(await new AIGateway([new FakeAIProvider()], { recorder: throwing }).wordExperiment(wording, { retries: 0 })).toMatchObject({ ok: true });
+    const rejecting: AIRecorder = { record: () => Promise.reject(new Error("ledger down")) };
+    expect(await new AIGateway([new FakeAIProvider()], { recorder: rejecting }).wordExperiment(wording, { retries: 0 })).toMatchObject({ ok: true });
+  });
+
+  it("answers no_providers when the list is empty, and records nothing", async () => {
+    const { records, recorder } = collector();
+    const result = await new AIGateway([], { recorder }).wordExperiment(wording);
+    expect(result).toEqual({ ok: false, reason: "no_providers", attempts: [] });
+    expect(records).toEqual([]);
+  });
+
+  it("a malformed context never reaches a real adapter as a request: the adapter throws, the gateway reports a failed attempt", async () => {
+    const bad: InsightContext = { locale: "en", facts: { approved_text: SENTENCE, scope: "next_meal", max_chars: 180, tone: "calm", notes: "x" } };
+    const provider = new FakeAIProvider("real-like");
+    provider.generateInsight = () => Promise.reject(new Error("wording_facts_shape"));
+    const result = await new AIGateway([provider]).wordExperiment(bad, { retries: 0 });
+    expect(result).toEqual({ ok: false, reason: "all_providers_failed", attempts: [{ provider: "real-like", error: "wording_facts_shape" }] });
+  });
+
+  it("the other insight operation still records nothing", async () => {
+    const { records, recorder } = collector();
+    await new AIGateway([new FakeAIProvider()], { recorder }).generateInsight({ locale: "en", facts: {} });
+    expect(records).toEqual([]);
   });
 });

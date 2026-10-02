@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { NOT_SNOOZED } from "../firstWeekFlow/types";
 import type { OfflinePeriod } from "../offline";
 
 // Runs the resolver with the first-report switch OFF. HOME_FEATURES is a `const`, so the module is mocked.
@@ -19,7 +20,18 @@ const WINTER_SHABBAT: OfflinePeriod = {
 };
 
 function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
-  return { now: new Date(now), timeZone: TZ, offlinePeriods: [WINTER_SHABBAT], hasAnyReport: true, ...overrides };
+  return {
+    now: new Date(now),
+    timeZone: TZ,
+    offlinePeriods: [WINTER_SHABBAT],
+    hasAnyReport: true,
+    lifecycle: "FIRST_WEEK",
+    firstWeek: { availableDays: 2, confirmedMeals: 3, availableDaysSinceLastMeal: 0 },
+    firstWeekSnoozed: NOT_SNOOZED,
+    earlySignal: null,
+    quietHours: null,
+    ...overrides,
+  };
 }
 
 function label(state: HomeState): string {

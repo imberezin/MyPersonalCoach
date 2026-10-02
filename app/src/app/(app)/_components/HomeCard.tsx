@@ -9,8 +9,9 @@ export const HOME_TITLE_ID = "home-title";
 
 /**
  * Home is one card: a heading, a sentence, and (only when the decision has one) an invitation with
- * its single button. No second card, no counters, no percentages, no day numbers. When something
- * could not be loaded, one calm note sits under the card.
+ * its single button, or the three answers of the Early Signal card (an action without an invitation).
+ * No second card, no counters, no percentages, no day numbers. When something could not be loaded, one
+ * calm note sits under the card.
  */
 export function HomeCard({ copy, action }: { copy: HomeCopy; action: ReactNode | null }) {
   return (
@@ -27,9 +28,9 @@ export function HomeCard({ copy, action }: { copy: HomeCopy; action: ReactNode |
           </h1>
           {copy.lead ? <p className={styles.homeLead}>{copy.lead}</p> : null}
           <p className={styles.homeText}>{copy.body}</p>
-          {copy.invitation ? (
+          {copy.invitation || action ? (
             <div className={styles.invitation}>
-              {copy.invitation.lead ? <p className={styles.lead}>{copy.invitation.lead}</p> : null}
+              {copy.invitation?.lead ? <p className={styles.lead}>{copy.invitation.lead}</p> : null}
               {action}
             </div>
           ) : null}

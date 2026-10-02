@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FOOD_LIMITS } from "@/domain/food";
-import { mealUnderstandingSchema, mealWireSchema } from "./schemas";
+import { experimentWordingSchema, mealUnderstandingSchema, mealWireSchema } from "./schemas";
 
 const wireItem = (over: Record<string, unknown> = {}) => ({
   name: "שניצל",
@@ -273,5 +273,21 @@ describe("mealUnderstandingSchema: hostile outputs", () => {
   it("is a wire schema without surplus keys on its own", () => {
     const parsed = mealWireSchema.parse(wire({ extra: 1 })) as Record<string, unknown>;
     expect(parsed.extra).toBeUndefined();
+  });
+});
+
+describe("experimentWordingSchema", () => {
+  it("accepts { text } and strips unknown keys", () => {
+    expect(experimentWordingSchema.parse({ text: "בארוחה הבאה, שב." })).toEqual({ text: "בארוחה הבאה, שב." });
+    expect(experimentWordingSchema.parse({ text: "x", extra: 1, calories: 9 })).toEqual({ text: "x" });
+  });
+
+  it("rejects a missing text, an empty text, a text that is not a string and a text over the hostile-size bound", () => {
+    expect(experimentWordingSchema.safeParse({}).success).toBe(false);
+    expect(experimentWordingSchema.safeParse({ text: "" }).success).toBe(false);
+    expect(experimentWordingSchema.safeParse({ text: 5 }).success).toBe(false);
+    expect(experimentWordingSchema.safeParse(null).success).toBe(false);
+    expect(experimentWordingSchema.safeParse({ text: "a".repeat(400) }).success).toBe(true);
+    expect(experimentWordingSchema.safeParse({ text: "a".repeat(401) }).success).toBe(false);
   });
 });

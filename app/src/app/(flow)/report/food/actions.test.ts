@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   track: vi.fn(),
   logAppError: vi.fn(),
   revalidatePath: vi.fn(),
+  // The development clock and the end-of-save pattern refresh (First Week, Phase 2).
+  currentInstant: vi.fn(),
+  refreshPatterns: vi.fn(),
 }));
 
 // The real redirect() and notFound() throw to stop the render; the stand-ins do the same and say where to.
@@ -48,6 +51,8 @@ vi.mock("@/lib/food/repo", () => ({
 }));
 vi.mock("@/lib/ai/ledger", () => ({ logAppError: mocks.logAppError }));
 vi.mock("@/lib/analytics/track", () => ({ track: mocks.track, SupabaseEventsSink: class {} }));
+vi.mock("@/lib/clock/now", () => ({ currentInstant: mocks.currentInstant }));
+vi.mock("@/lib/patterns/refresh", () => ({ refreshPatternsAfterMealChange: mocks.refreshPatterns }));
 
 const supabase = { tag: "user-client" };
 const ready = (lifecycle_state = "FIRST_WEEK") => ({
@@ -108,6 +113,8 @@ beforeEach(() => {
   mocks.confirmMeal.mockResolvedValue({ ok: true, value: { entryId: "entry-1" } });
   mocks.saveDraft.mockResolvedValue({ ok: true, value: true });
   mocks.discardUnderstanding.mockResolvedValue({ ok: true, value: true });
+  mocks.currentInstant.mockReset().mockReturnValue(new Date("2026-09-16T06:00:00Z"));
+  mocks.refreshPatterns.mockReset().mockResolvedValue(undefined);
   mocks.track.mockResolvedValue(undefined);
   mocks.logAppError.mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -260,6 +267,78 @@ describe("confirmMealAction", () => {
     mocks.loadUnderstanding.mockResolvedValue({ ok: false, code: "unavailable" });
     await expect(outcome(() => confirmMealAction(confirmForm(understanding())))).resolves.toBe(`REDIRECT:${FOOD_ROUTES.confirm(ID)}?failed=1:replace`);
     expect(mocks.confirmMeal).not.toHaveBeenCalled();
+  });
+
+  describe("the pattern refresh at the end of a save (First Week, Phase 2)", () => {
+    const DEV_CLOCK = new Date("2026-09-16T06:00:00Z");
+
+    it("runs once, with the ready context and the app's clock, after the save and after the meal_saved event", async () => {
+      const u = understanding();
+      mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: u });
+
+      await expect(outcome(() => confirmMealAction(confirmForm(u)))).resolves.toBe(`REDIRECT:${FOOD_ROUTES.saved(ID)}:replace`);
+
+      expect(mocks.refreshPatterns).toHaveBeenCalledTimes(1);
+      expect(mocks.refreshPatterns).toHaveBeenCalledWith(mocks.context.current, DEV_CLOCK);
+      expect(mocks.confirmMeal.mock.invocationCallOrder[0]).toBeLessThan(mocks.refreshPatterns.mock.invocationCallOrder[0]);
+      expect(mocks.track.mock.invocationCallOrder.at(-1) ?? 0).toBeLessThan(mocks.refreshPatterns.mock.invocationCallOrder[0]);
+    });
+
+    it("also runs after an edited save, once", async () => {
+      const base = understanding();
+      const u = understanding({ draft: { ...mealOf(base), mealType: "dinner" as const } });
+      mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: u });
+      await outcome(() => confirmMealAction(confirmForm(u)));
+      expect(mocks.refreshPatterns).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["a failed save", () => mocks.confirmMeal.mockResolvedValue({ ok: false, code: "unavailable" })],
+      ["a report that is no longer pending", () => mocks.confirmMeal.mockResolvedValue({ ok: false, code: "not_pending" })],
+      ["a report that cannot be loaded", () => mocks.loadUnderstanding.mockResolvedValue({ ok: false, code: "unavailable" })],
+      ["a stale screen", () => mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: understanding({ items: [] }) })],
+    ])("never runs after %s", async (_name, arrange) => {
+      const u = understanding();
+      mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: u });
+      arrange();
+      await outcome(() => confirmMealAction(confirmForm(u)));
+      expect(mocks.refreshPatterns).not.toHaveBeenCalled();
+    });
+
+    it("never runs for a report that was already saved (a double tap)", async () => {
+      const u = understanding({ status: "accepted" });
+      mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: u });
+      await outcome(() => confirmMealAction(confirmForm(u)));
+      expect(mocks.refreshPatterns).not.toHaveBeenCalled();
+    });
+
+    it("changes neither the landing nor the events when the refresh rejects", async () => {
+      const u = understanding({ draft: { ...mealOf(understanding()), mealType: "dinner" as const } });
+      mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: u });
+      mocks.refreshPatterns.mockRejectedValue(new Error("boom"));
+
+      await expect(outcome(() => confirmMealAction(confirmForm(u)))).resolves.toBe(`REDIRECT:${FOOD_ROUTES.saved(ID)}:replace`);
+      expect(mocks.track.mock.calls.map((call) => call[1])).toEqual(["meal_saved", "meal_corrected"]);
+      expect(mocks.revalidatePath).toHaveBeenCalledWith("/", "layout");
+    });
+
+    it("saves with the REAL clock even when the app's clock is a past development instant", async () => {
+      // A meal dated 30 minutes ago would be "in the past" for a clock set to September, and a meal stamped by the
+      // database is later than it: the save, the report time and the meal_saved event must not follow that clock.
+      mocks.currentInstant.mockReturnValue(new Date("2020-01-01T00:00:00Z"));
+      const u = understanding();
+      mocks.loadUnderstanding.mockResolvedValue({ ok: true, value: u });
+
+      await expect(outcome(() => confirmMealAction(confirmForm(u)))).resolves.toBe(`REDIRECT:${FOOD_ROUTES.saved(ID)}:replace`);
+
+      expect(mocks.confirmMeal).toHaveBeenCalledTimes(1);
+      const saved = mocks.track.mock.calls[0] ?? [];
+      expect(saved[1]).toBe("meal_saved");
+      expect((saved[2] as { report_ms: number }).report_ms).toBeGreaterThanOrEqual(5 * 60_000);
+      // No fourth argument: the event keeps the real time.
+      expect(saved).toHaveLength(3);
+      expect(mocks.refreshPatterns).toHaveBeenCalledWith(mocks.context.current, new Date("2020-01-01T00:00:00Z"));
+    });
   });
 
   describe("the session is checked again, because a page guard does not protect a direct POST", () => {

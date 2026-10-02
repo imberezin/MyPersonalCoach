@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TIME_ZONE } from "@/i18n/config";
+import type { FirstWeekProgress } from "../firstWeekFlow/types";
+import { NOT_SNOOZED } from "../firstWeekFlow/types";
 import type { OfflinePeriod, OfflineType } from "../offline";
 import {
   HOME_COPY_KEYS,
@@ -28,8 +30,22 @@ const period = (type: OfflineType, start: string, end: string): OfflinePeriod =>
 // Winter Shabbat: candle lighting 16:10, havdalah 17:25 local (UTC+2).
 const WINTER_SHABBAT = period("SHABBAT", "2027-01-08T14:10:00Z", "2027-01-09T15:25:00Z");
 
+// Mid-First Week: the rules are nowhere near ready and nobody has been away, so the First Week states stay out of the way.
+const KEEP_GOING: FirstWeekProgress = { availableDays: 2, confirmedMeals: 3, availableDaysSinceLastMeal: 0 };
+
 function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
-  return { now: new Date(now), timeZone: TZ, offlinePeriods: [WINTER_SHABBAT], hasAnyReport: true, ...overrides };
+  return {
+    now: new Date(now),
+    timeZone: TZ,
+    offlinePeriods: [WINTER_SHABBAT],
+    hasAnyReport: true,
+    lifecycle: "FIRST_WEEK",
+    firstWeek: KEEP_GOING,
+    firstWeekSnoozed: NOT_SNOOZED,
+    earlySignal: null,
+    quietHours: null,
+    ...overrides,
+  };
 }
 
 /** A short label for a state, so the tables below read like the spec. */
@@ -87,16 +103,14 @@ describe("resolveHome: precedence", () => {
   });
 
   it("takes the earliest start for Before Shabbat when two Shabbat periods qualify", () => {
-    const now = new Date("2027-01-08T12:00:00Z");
     const later = period("SHABBAT", "2027-01-08T14:30:00Z", "2027-01-09T15:45:00Z");
-    const decision = resolveHome({ now, timeZone: TZ, offlinePeriods: [later, WINTER_SHABBAT], hasAnyReport: true });
+    const decision = resolveHome(facts("2027-01-08T12:00:00Z", { offlinePeriods: [later, WINTER_SHABBAT] }));
     expect(decision.state).toEqual({ key: "BEFORE_SHABBAT", candleLighting: WINTER_SHABBAT.start });
   });
 
   it("takes the latest end for Motzei Shabbat when two Shabbat periods qualify", () => {
-    const now = new Date("2027-01-09T17:00:00Z");
     const earlier = period("SHABBAT", "2027-01-08T12:00:00Z", "2027-01-09T13:00:00Z");
-    const decision = resolveHome({ now, timeZone: TZ, offlinePeriods: [WINTER_SHABBAT, earlier], hasAnyReport: true });
+    const decision = resolveHome(facts("2027-01-09T17:00:00Z", { offlinePeriods: [WINTER_SHABBAT, earlier] }));
     expect(decision.state).toEqual({ key: "MOTZEI_SHABBAT", havdalah: WINTER_SHABBAT.end });
   });
 
@@ -298,6 +312,11 @@ describe("resolveHome: the action", () => {
       timeZone: DEFAULT_TIME_ZONE,
       offlinePeriods: null,
       hasAnyReport: null,
+      lifecycle: null,
+      firstWeek: null,
+      firstWeekSnoozed: NOT_SNOOZED,
+      earlySignal: null,
+      quietHours: null,
     });
     expect(decision).toEqual({ state: { key: "MORNING" }, action: null, degraded: true });
   });
@@ -451,6 +470,10 @@ describe("homeCopyKey", () => {
     [{ key: "BEFORE_SHABBAT", candleLighting: date }, "beforeShabbat"],
     [{ key: "MOTZEI_SHABBAT", havdalah: date }, "motzeiShabbat"],
     [{ key: "FIRST_WEEK_START" }, "firstWeekStart"],
+    [{ key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: true }, "firstWeekSummaryReady"],
+    [{ key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: false }, "firstWeekSummaryReadyLittle"],
+    [{ key: "FIRST_WEEK_WELCOME_BACK" }, "firstWeekWelcomeBack"],
+    [{ key: "EARLY_SIGNAL", signal: "late_evening_meals" }, "earlySignalLateEvening"],
     [{ key: "SILENCE", reason: "NOTHING_TO_SAY" }, "silence"],
     [{ key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" }, "offlineShabbat"],
     [{ key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" }, "offlineOther"],

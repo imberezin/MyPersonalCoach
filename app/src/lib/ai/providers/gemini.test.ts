@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { AIGateway } from "../gateway";
 import { MEAL_JSON_SCHEMA } from "../prompts/mealSchema";
-import { ProviderError } from "../types";
+import { MEAL_SYSTEM_PROMPT_HE } from "../prompts/meal";
+import { WORDING_SYSTEM_PROMPT_HE } from "../prompts/wording";
+import { ProviderError, type InsightContext } from "../types";
 import { GEMINI_ENDPOINT, GeminiProvider } from "./gemini";
 
 const KEY = "test-gemini-key-123";
@@ -160,7 +162,7 @@ describe("GeminiProvider response", () => {
 
   it("the other operations are unsupported", async () => {
     const p = provider(fakeFetch(() => json({})).fetch);
-    for (const call of [p.transcribeVoice(), p.generateInsight(), p.detectPatternCandidate(), p.coach()]) {
+    for (const call of [p.transcribeVoice(), p.detectPatternCandidate(), p.coach()]) {
       const error = await call.catch((e) => e);
       expect(error).toBeInstanceOf(ProviderError);
       expect(error.kind).toBe("unsupported");
@@ -193,5 +195,127 @@ describe("GeminiProvider through the gateway", () => {
       expect(result.value.items.map((i) => i.name)).toEqual(["תפוח"]);
       expect(JSON.stringify(result.value)).not.toMatch(/calor|9999/);
     }
+  });
+});
+
+const SENTENCE = "At your next meal, sit down, put it on a plate, and take a few minutes without a screen.";
+const wordingContext = (over: Partial<InsightContext> = {}): InsightContext => ({
+  locale: "en",
+  interventionKey: "eat_intentionally",
+  variantId: "default",
+  facts: { approved_text: SENTENCE, scope: "next_meal", max_chars: 180, tone: "calm" },
+  ...over,
+});
+
+describe("GeminiProvider meal path (regression guard for the wording change)", () => {
+  it("keeps the exact request body of a text report", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse()));
+    await provider(doFetch).analyzeText({ text: "שניצל", locale: "he" }, ctx());
+    expect(JSON.stringify(calls[0].body)).toBe(
+      JSON.stringify({
+        systemInstruction: { parts: [{ text: MEAL_SYSTEM_PROMPT_HE }] },
+        contents: [{ role: "user", parts: [{ text: "<user_text>\nשניצל\n</user_text>" }] }],
+        generationConfig: {
+          maxOutputTokens: 2048,
+          responseMimeType: "application/json",
+          responseJsonSchema: MEAL_JSON_SCHEMA,
+          thinkingConfig: { thinkingLevel: "LOW" },
+        },
+      }),
+    );
+  });
+});
+
+describe("GeminiProvider generateInsight (the experiment wording)", () => {
+  const answer = { text: "At your next meal, sit down, put it on a plate, and take a few minutes without a screen, if you like." };
+
+  it("posts the wording request to the same endpoint and headers as the meal path, the key only in the header", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch).generateInsight(wordingContext(), ctx());
+    const [call] = calls;
+    expect(call.url).toBe(`${GEMINI_ENDPOINT}/gemini-3.1-flash-lite:generateContent`);
+    expect(call.url).not.toContain(KEY);
+    expect(call.init.headers).toMatchObject({ "x-goog-api-key": KEY, "Content-Type": "application/json" });
+    expect(call.init.method).toBe("POST");
+    expect(JSON.stringify(call.body)).not.toContain(KEY);
+  });
+
+  it("sends the wording system prompt, one user turn with the delimited sentence, and the wording schema", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch).generateInsight(wordingContext(), ctx());
+    const body = calls[0].body as {
+      systemInstruction: { parts: { text: string }[] };
+      contents: { role: string; parts: Record<string, unknown>[] }[];
+      generationConfig: Record<string, unknown>;
+    };
+    expect(body.systemInstruction.parts[0].text).toBe(WORDING_SYSTEM_PROMPT_HE.replace("{max_chars}", "180"));
+    expect(body.contents).toEqual([{ role: "user", parts: [{ text: `<approved_text>\n${SENTENCE}\n</approved_text>` }] }]);
+    expect(body.generationConfig).toEqual({
+      maxOutputTokens: 2048,
+      responseMimeType: "application/json",
+      responseJsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text"],
+        properties: { text: { type: "string", maxLength: 180, description: expect.any(String) } },
+      },
+      thinkingConfig: { thinkingLevel: "LOW" },
+    });
+  });
+
+  it("parses the reply like the meal reply: the JSON, the model and the usage", async () => {
+    const { fetch: doFetch } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    const reply = await provider(doFetch).generateInsight(wordingContext(), ctx());
+    expect(reply.output).toEqual(answer);
+    expect(reply.model).toBe("gemini-3.1-flash-lite");
+    expect(reply.usage).toEqual({ inputTokens: 321, outputTokens: 88, reasoningTokens: 12 });
+  });
+
+  it("a context outside the closed shape throws before any request is made", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse()));
+    const bad = wordingContext({ facts: { approved_text: SENTENCE, scope: "next_meal", max_chars: 180, tone: "calm", notes: "I ate bread" } });
+    const error = await provider(doFetch).generateInsight(bad, ctx()).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).not.toContain("bread");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses a model id that could change the URL path", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse()));
+    const error = await provider(doFetch, { model: "x/../other" }).generateInsight(wordingContext(), ctx()).catch((e) => e);
+    expect(error.kind).toBe("bad_request");
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    [401, "auth"],
+    [429, "rate_limited"],
+    [400, "bad_request"],
+    [503, "server"],
+  ])("HTTP %s -> %s, and the response body is never in the error", async (status, kind) => {
+    const { fetch: doFetch } = fakeFetch(() => json({ error: { message: `echo: ${SENTENCE}` } }, status));
+    const error = await provider(doFetch).generateInsight(wordingContext(), ctx()).catch((e) => e);
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error.kind).toBe(kind);
+    expect(error.message).not.toContain("sit down");
+  });
+
+  it("a blocked prompt is 'blocked', empty candidates are a server failure", async () => {
+    const blocked = fakeFetch(() => json({ promptFeedback: { blockReason: "SAFETY" } }));
+    expect((await provider(blocked.fetch).generateInsight(wordingContext(), ctx()).catch((e) => e)).kind).toBe("blocked");
+    const empty = fakeFetch(() => json({ candidates: [] }));
+    expect((await provider(empty.fetch).generateInsight(wordingContext(), ctx()).catch((e) => e)).kind).toBe("server");
+  });
+
+  it("through the gateway: a recorded good answer is a typed { text }; a wrong shape is invalid output", async () => {
+    const good = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    const result = await new AIGateway([provider(good.fetch)]).wordExperiment(wordingContext(), { retries: 0 });
+    expect(result).toMatchObject({ ok: true, provider: "gemini", value: answer });
+
+    const wrong = fakeFetch(() => json(okResponse(JSON.stringify({ sentence: "x", text: "" }))));
+    expect(await new AIGateway([provider(wrong.fetch)]).wordExperiment(wordingContext(), { retries: 0 })).toMatchObject({
+      ok: false,
+      reason: "all_providers_failed",
+    });
   });
 });

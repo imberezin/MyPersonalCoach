@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import {
   coachReplySchema,
+  experimentWordingSchema,
   insightSchema,
   mealUnderstandingSchema,
   patternCandidatesSchema,
@@ -44,6 +45,10 @@ export interface GatewayOptions {
 /** Per call override (a photo gets a longer attempt than text). */
 export interface CallOptions {
   timeoutMs?: number;
+  /** Extra tries on the same provider when its output fails validation; overrides the gateway default for this call. */
+  retries?: number;
+  /** Total time across all attempts of this call; overrides the gateway default. */
+  totalBudgetMs?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 12_000;
@@ -114,6 +119,14 @@ export class AIGateway {
     return this.run(null, (p, ctx) => p.generateInsight(context, ctx), insightSchema, options);
   }
 
+  /**
+   * Rewords an approved experiment sentence (the wording operation of the First Week build). `context.facts` is the
+   * closed shape of prompts/wording.ts. Recorded in the ledger as "wordExperiment", one row per attempt.
+   */
+  wordExperiment(context: InsightContext, options?: CallOptions) {
+    return this.run("wordExperiment", (p, ctx) => p.generateInsight(context, ctx), experimentWordingSchema, options);
+  }
+
   detectPatternCandidate(events: Parameters<AIProvider["detectPatternCandidate"]>[0], options?: CallOptions) {
     return this.run(null, (p, ctx) => p.detectPatternCandidate(events, ctx), patternCandidatesSchema, options);
   }
@@ -148,10 +161,12 @@ export class AIGateway {
     if (this.providers.length === 0) return { ok: false, reason: "no_providers", attempts };
 
     const attemptTimeout = options.timeoutMs ?? this.timeoutMs;
+    const retries = options.retries ?? this.retries;
+    const totalBudgetMs = options.totalBudgetMs ?? this.totalBudgetMs;
     const startedAt = this.clock();
     let budgetExhausted = false;
 
-    // Only the two meal operations are in the ledger; the other operations record nothing.
+    // Only the meal operations and the experiment wording are in the ledger; the other operations record nothing.
     const recordOf = (
       provider: AIProvider,
       attemptStart: number,
@@ -173,8 +188,8 @@ export class AIGateway {
           };
 
     for (const provider of this.providers) {
-      for (let tryNumber = 0; tryNumber <= this.retries; tryNumber++) {
-        const remaining = this.totalBudgetMs - (this.clock() - startedAt);
+      for (let tryNumber = 0; tryNumber <= retries; tryNumber++) {
+        const remaining = totalBudgetMs - (this.clock() - startedAt);
         if (remaining < MIN_ATTEMPT_MS) {
           budgetExhausted = true;
           break;

@@ -30,10 +30,16 @@ const STATES: Array<[string, HomeState]> = [
   ["before Shabbat", { key: "BEFORE_SHABBAT", candleLighting: CANDLE_LIGHTING }],
   ["Motzei Shabbat", { key: "MOTZEI_SHABBAT", havdalah: HAVDALAH }],
   ["First Week Start", { key: "FIRST_WEEK_START" }],
+  ["summary ready", { key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: true }],
+  ["summary ready, little data", { key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: false }],
+  ["welcome back", { key: "FIRST_WEEK_WELCOME_BACK" }],
+  ["Early Signal", { key: "EARLY_SIGNAL", signal: "late_evening_meals" }],
   ["nothing to say", { key: "SILENCE", reason: "NOTHING_TO_SAY" }],
   ["Shabbat in progress", { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" }],
   ["a holiday in progress", { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" }],
 ];
+
+const snoozeCards: ReadonlySet<HomeState["key"]> = new Set(["FIRST_WEEK_SUMMARY_READY", "FIRST_WEEK_WELCOME_BACK"]);
 
 const decision = (state: HomeState, over: Partial<HomeDecision> = {}): HomeDecision => ({
   state,
@@ -64,7 +70,18 @@ describe("homeCopyFor", () => {
     it("passes the brand-voice lint for every state, with and without the invitation and the note", () => {
       for (const [, state] of STATES) {
         const copy = homeCopyFor(decision(state, { action: ACTION, degraded: true }), t, format);
-        const text = [copy.title, copy.lead, copy.body, copy.invitation?.lead, copy.invitation?.cta, copy.degradedNote]
+        const text = [
+          copy.title,
+          copy.lead,
+          copy.body,
+          copy.invitation?.lead,
+          copy.invitation?.cta,
+          copy.invitation?.snoozeLabel,
+          copy.earlySignal?.confirm,
+          copy.earlySignal?.unsure,
+          copy.earlySignal?.reject,
+          copy.degradedNote,
+        ]
           .join("\n")
           .toLowerCase();
         for (const word of FORBIDDEN[locale]) expect(text, `${locale}: "${word}"`).not.toContain(word.toLowerCase());
@@ -102,10 +119,22 @@ describe("homeCopyFor", () => {
     for (const locale of LOCALES) {
       const t = translator(locale);
       const { lead, cta } = homeText[locale].firstReport;
+      const words = homeText[locale];
       for (const [name, state] of STATES) {
-        // First Week Start says its piece in its own lead and body, so only its button is the invitation.
+        // First Week Start and the summary card say their piece in their own lead and body, so only their button is the
+        // invitation; the welcome-back card has its own sentence and button; the two cards that can be put away carry
+        // their "Not now"; the Early Signal card has no invitation at all (its three buttons are its answers).
         const expected =
-          state.key === "FIRST_WEEK_START" ? { lead: null, cta: homeText[locale].firstWeekStart.cta } : { lead, cta };
+          state.key === "FIRST_WEEK_START"
+            ? { lead: null, cta: words.firstWeekStart.cta, snoozeLabel: null }
+            : state.key === "FIRST_WEEK_SUMMARY_READY"
+              ? { lead: null, cta: (state.hadEnoughData ? words.firstWeekSummaryReady : words.firstWeekSummaryReadyLittle).cta, snoozeLabel: words.firstWeekSnooze }
+              : state.key === "FIRST_WEEK_WELCOME_BACK"
+                ? { lead: words.firstWeekWelcomeBack.lead, cta: words.firstWeekWelcomeBack.cta, snoozeLabel: words.firstWeekSnooze }
+                : state.key === "EARLY_SIGNAL"
+                  ? null
+                  : { lead, cta, snoozeLabel: null };
+        expect(snoozeCards.has(state.key) === (expected?.snoozeLabel != null), name).toBe(true);
         for (const degraded of [false, true]) {
           const where = `${locale}: ${name}, degraded ${degraded}`;
           const without = homeCopyFor(decision(state, { degraded }), t, FORMAT);
@@ -164,7 +193,7 @@ describe("homeCopyFor", () => {
       expect(copy.title).toBe(text.title);
       expect(copy.lead).toBe(text.lead);
       expect(copy.body).toBe(text.body);
-      expect(copy.invitation).toEqual({ lead: null, cta: text.cta });
+      expect(copy.invitation).toEqual({ lead: null, cta: text.cta, snoozeLabel: null });
       expect(copy.emoji).toBeNull();
     });
 
@@ -189,6 +218,121 @@ describe("homeCopyFor", () => {
       const t = translator("he");
       for (const [name, other] of STATES) {
         expect(homeCopyFor(decision(other), t, FORMAT).lead === null, name).toBe(other.key !== "FIRST_WEEK_START");
+      }
+    });
+  });
+
+  describe("the First Week cards", () => {
+    const summary = (hadEnoughData: boolean): HomeState => ({ key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData });
+    const SUMMARY_ACTION: HomeAction = { kind: "OPEN_FIRST_WEEK_SUMMARY" };
+    const BACK_ACTION: HomeAction = { kind: "OPEN_REPORT_SHEET", reason: "WELCOME_BACK" };
+
+    it.each(LOCALES)("%s: the summary card uses firstWeekSummaryReady with data and firstWeekSummaryReadyLittle without", (locale) => {
+      const words = homeText[locale];
+      const format = { locale, timeZone: "Asia/Jerusalem" };
+      const enough = homeCopyFor(decision(summary(true), { action: SUMMARY_ACTION }), translator(locale), format);
+      const little = homeCopyFor(decision(summary(false), { action: SUMMARY_ACTION }), translator(locale), format);
+
+      expect([enough.title, enough.body]).toEqual([words.firstWeekSummaryReady.title, words.firstWeekSummaryReady.body]);
+      expect([little.title, little.body]).toEqual([words.firstWeekSummaryReadyLittle.title, words.firstWeekSummaryReadyLittle.body]);
+      // An opening line of its own is B1's only, and the summary card has no sentence above its button.
+      expect(enough.lead).toBeNull();
+      expect(enough.invitation).toEqual({ lead: null, cta: words.firstWeekSummaryReady.cta, snoozeLabel: words.firstWeekSnooze });
+      expect(little.invitation).toEqual({ lead: null, cta: words.firstWeekSummaryReadyLittle.cta, snoozeLabel: words.firstWeekSnooze });
+    });
+
+    it("never claims familiarity without data, in either language", () => {
+      expect(homeText.he.firstWeekSummaryReadyLittle.title).not.toBe(homeText.he.firstWeekSummaryReady.title);
+      expect(homeText.he.firstWeekSummaryReadyLittle.title).not.toContain("הכרנו");
+      expect(homeText.en.firstWeekSummaryReadyLittle.title.toLowerCase()).not.toContain("know each other");
+      expect(homeText.he.firstWeekSummaryReadyLittle.body).not.toContain("הכרנו");
+      expect(homeText.en.firstWeekSummaryReadyLittle.body.toLowerCase()).not.toContain("know each other");
+    });
+
+    it.each(LOCALES)("%s: the welcome-back card has a sentence and a button of its own, and a Not now", (locale) => {
+      const words = homeText[locale].firstWeekWelcomeBack;
+      const copy = homeCopyFor(decision({ key: "FIRST_WEEK_WELCOME_BACK" }, { action: BACK_ACTION }), translator(locale), {
+        locale,
+        timeZone: "Asia/Jerusalem",
+      });
+      expect([copy.title, copy.body]).toEqual([words.title, words.body]);
+      expect(copy.invitation).toEqual({ lead: words.lead, cta: words.cta, snoozeLabel: homeText[locale].firstWeekSnooze });
+      expect(copy.emoji).toBeNull();
+    });
+
+    it("says the spec's words in Hebrew", () => {
+      const t = translator("he");
+      expect(homeCopyFor(decision({ key: "FIRST_WEEK_WELCOME_BACK" }, { action: BACK_ACTION }), t, FORMAT).title).toBe("חזרת");
+      expect(homeCopyFor(decision(summary(true), { action: SUMMARY_ACTION }), t, FORMAT).title).toBe("כבר הכרנו קצת");
+      expect(homeCopyFor(decision(summary(false), { action: SUMMARY_ACTION }), t, FORMAT).title).toBe("התקופה הראשונה שלנו");
+    });
+
+    it("has no digit, percentage or score in the three cards, in either language", () => {
+      for (const locale of LOCALES) {
+        const t = translator(locale);
+        for (const [state, action] of [
+          [summary(true), SUMMARY_ACTION],
+          [summary(false), SUMMARY_ACTION],
+          [{ key: "FIRST_WEEK_WELCOME_BACK" }, BACK_ACTION],
+        ] as Array<[HomeState, HomeAction]>) {
+          const copy = homeCopyFor(decision(state, { action }), t, { locale, timeZone: "UTC" });
+          const text = [copy.title, copy.lead, copy.body, copy.invitation?.lead, copy.invitation?.cta, copy.invitation?.snoozeLabel].join("\n");
+          expect(text, `${locale}: ${state.key}`).not.toMatch(/\d|%|score|ציון/i);
+        }
+      }
+    });
+
+    it("gives no title a final period, like every other Home title", () => {
+      const t = translator("he");
+      for (const [name, state] of STATES) expect(homeCopyFor(decision(state), t, FORMAT).title.endsWith("."), name).toBe(false);
+    });
+  });
+
+  describe("the Early Signal card (B4)", () => {
+    const state: HomeState = { key: "EARLY_SIGNAL", signal: "late_evening_meals" };
+    const ANSWER: HomeAction = { kind: "ANSWER_EARLY_SIGNAL" };
+
+    it.each(LOCALES)("%s: the title, the body and the three answers, with the light bulb, and no invitation", (locale) => {
+      const words = homeText[locale].earlySignalLateEvening;
+      const copy = homeCopyFor(decision(state, { action: ANSWER }), translator(locale), { locale, timeZone: "Asia/Jerusalem" });
+      expect([copy.title, copy.body]).toEqual([words.title, words.body]);
+      expect(copy.earlySignal).toEqual({ confirm: words.confirm, unsure: words.unsure, reject: words.reject });
+      expect(copy.invitation).toBeNull();
+      expect(copy.lead).toBeNull();
+      expect(copy.emoji).toBe("💡");
+    });
+
+    it("gives the answers to that state only", () => {
+      const t = translator("he");
+      for (const [name, other] of STATES) {
+        expect(homeCopyFor(decision(other, { action: ACTION }), t, FORMAT).earlySignal === null, name).toBe(other.key !== "EARLY_SIGNAL");
+      }
+    });
+
+    it("says the spec's words in Hebrew, and names the hour by the clock, not as a verdict", () => {
+      const copy = homeCopyFor(decision(state, { action: ANSWER }), translator("he"), FORMAT);
+      expect(copy.title).toBe("משהו קטן ששמתי לב אליו");
+      expect(copy.body).toContain("ארוחה בשעות הערב המאוחרות");
+      expect(copy.body).not.toContain("ארוחה מאוחר ");
+      expect(copy.earlySignal).toEqual({ confirm: "נשמע לי נכון", unsure: "לא בטוח", reject: "לא קשור אליי" });
+    });
+
+    it("has no digit, no exclamation mark, and no jargon, in either language", () => {
+      for (const locale of LOCALES) {
+        const copy = homeCopyFor(decision(state, { action: ANSWER }), translator(locale), { locale, timeZone: "UTC" });
+        const text = [copy.title, copy.body, copy.earlySignal?.confirm, copy.earlySignal?.unsure, copy.earlySignal?.reject].join("\n");
+        expect(text, locale).not.toMatch(/\d|!/);
+        expect(text.toLowerCase(), locale).not.toMatch(/דפוס|pattern|signal|evidence/);
+      }
+    });
+
+    it("has three different, non-empty answers", () => {
+      for (const locale of LOCALES) {
+        const answers = homeCopyFor(decision(state, { action: ANSWER }), translator(locale), { locale, timeZone: "UTC" }).earlySignal;
+        const values = Object.values(answers ?? {});
+        expect(values).toHaveLength(3);
+        expect(new Set(values).size).toBe(3);
+        for (const value of values) expect(value.trim()).not.toBe("");
       }
     });
   });

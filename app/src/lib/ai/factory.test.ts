@@ -83,6 +83,53 @@ describe("createAiRuntime", () => {
   });
 });
 
+describe("AI_FAKE_BEHAVIOR (the fake provider's wording behavior)", () => {
+  const SENTENCE = "At your next meal, sit down, put it on a plate, and take a few minutes without a screen.";
+  const wording = { locale: "en" as const, facts: { approved_text: SENTENCE, scope: "next_meal", max_chars: 180, tone: "calm" } };
+  const textOf = async (runtime: ReturnType<typeof createAiRuntime>) => {
+    const result = await runtime.gateway.wordExperiment(wording, { retries: 0 });
+    return result.ok ? result.value.text : null;
+  };
+
+  it("with fake in the provider order, the variable picks the behavior", async () => {
+    const env = { AI_PROVIDER_ORDER: "fake", AI_FAKE_BEHAVIOR: "wording_negate", ...ADMIN };
+    expect(await textOf(createAiRuntime({ env, nodeEnv: "development" }))).toContain("with a screen");
+    expect(await textOf(createAiRuntime({ env: { ...env, AI_FAKE_BEHAVIOR: "wording_fail" }, nodeEnv: "development" }))).toBeNull();
+  });
+
+  it("without the variable, or with an unknown value, the fake answers the default faithful reword", async () => {
+    const expected = `${SENTENCE.replace(/\.$/, "")}, if you like.`;
+    expect(await textOf(createAiRuntime({ env: { AI_PROVIDER_ORDER: "fake", ...ADMIN }, nodeEnv: "development" }))).toBe(expected);
+    expect(await textOf(createAiRuntime({ env: { AI_PROVIDER_ORDER: "fake", AI_FAKE_BEHAVIOR: "nonsense", ...ADMIN }, nodeEnv: "development" }))).toBe(expected);
+  });
+
+  it("is read outside production only: in production the fake is refused, so the variable changes nothing", async () => {
+    const env = { AI_PROVIDER_ORDER: "fake", AI_FAKE_BEHAVIOR: "wording_ok", ...ADMIN };
+    const runtime = createAiRuntime({ env, nodeEnv: "production" });
+    expect(runtime.providers).toEqual([]);
+    expect(runtime.configured).toBe(false);
+    expect(await runtime.gateway.wordExperiment(wording, { retries: 0 })).toMatchObject({ ok: false, reason: "no_providers" });
+  });
+
+  it("has no effect unless fake is in the provider order: with keys and the default order the fake is not built", async () => {
+    const env = { GEMINI_API_KEY: "g", GROQ_API_KEY: "q", AI_FAKE_BEHAVIOR: "wording_ok", ...ADMIN };
+    const runtime = createAiRuntime({ env, nodeEnv: "development" });
+    expect(runtime.providers).toEqual(["gemini", "groq"]);
+    expect(runtime.providers).not.toContain("fake");
+  });
+
+  it("an experiment wording attempt through the runtime is recorded as wordExperiment", async () => {
+    const records: string[] = [];
+    const runtime = createAiRuntime({
+      env: { AI_PROVIDER_ORDER: "fake", ...ADMIN },
+      nodeEnv: "development",
+      recorder: { record: (r) => void records.push(`${r.operation}:${r.outcome}`) },
+    });
+    await runtime.gateway.wordExperiment(wording, { retries: 0 });
+    expect(records).toEqual(["wordExperiment:ok"]);
+  });
+});
+
 describe("isAiConfigured", () => {
   it("is false with nothing set and never throws", () => {
     expect(isAiConfigured({}, "production")).toBe(false);

@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   findResumable: vi.fn(),
   loadUnderstanding: vi.fn(),
   loadSavedMeal: vi.fn(),
+  loadConfirmedMealTimes: vi.fn(),
   deleteMealAction: vi.fn(async () => {}),
 }));
 
@@ -52,6 +53,8 @@ vi.mock("./actions", () => ({
 }));
 // The Saved screen hands this action to the delete control; here only that it is the very function matters.
 vi.mock("@/app/(app)/me/meals/actions", () => ({ deleteMealAction: mocks.deleteMealAction }));
+// The meal times the Saved line is decided from; the rule itself (acknowledgementFor) runs for real.
+vi.mock("@/lib/firstWeek/load", () => ({ loadConfirmedMealTimes: mocks.loadConfirmedMealTimes }));
 vi.mock("@/lib/ai/factory", () => ({ isAiConfigured: mocks.isAiConfigured }));
 vi.mock("@/lib/food/repo", () => ({
   findResumable: mocks.findResumable,
@@ -126,6 +129,8 @@ beforeEach(() => {
   mocks.findResumable.mockReset().mockResolvedValue(null);
   mocks.loadUnderstanding.mockReset().mockResolvedValue({ ok: true, value: understanding() });
   mocks.loadSavedMeal.mockReset().mockResolvedValue({ ok: true, value: savedValue() });
+  // By default the only meal is the one on screen.
+  mocks.loadConfirmedMealTimes.mockReset().mockResolvedValue([NOW]);
 });
 
 describe("titles", () => {
@@ -320,27 +325,63 @@ describe("D8 /report/food/[id]/saved", () => {
 
   it.each(["accepted", "edited"] as const)("shows the saved view for a report that is %s", async (status) => {
     saved(status);
-    const element = (await SavedPage(idProps())) as ReactElement<{ firstReport: boolean; followUp: unknown }>;
+    const element = (await SavedPage(idProps())) as ReactElement<{ acknowledgement: unknown; followUp: unknown }>;
     expect(element.type).toBe(SavedView);
     expect(element.props.followUp).toEqual({ kind: "none" });
   });
 
-  it("adds the acknowledging line for the very first meal during the First Week", async () => {
-    saved();
-    const element = (await SavedPage(idProps())) as ReactElement<{ firstReport: boolean }>;
-    expect(element.props.firstReport).toBe(true);
-  });
+  describe("the acknowledging line (B2 / B3)", () => {
+    const acknowledgement = async () => ((await SavedPage(idProps())) as ReactElement<{ acknowledgement: unknown }>).props.acknowledgement;
+    const DAY = 86_400_000;
 
-  it("does not add it when it is not the first meal", async () => {
-    saved();
-    mocks.loadSavedMeal.mockResolvedValue({ ok: true, value: savedValue({ entryId: "entry-2", isFirstMeal: false }) });
-    expect(((await SavedPage(idProps())) as ReactElement<{ firstReport: boolean }>).props.firstReport).toBe(false);
-  });
+    it("loads the person's meal times with the verified user and passes the warm B2 line for the very first meal", async () => {
+      saved();
+      await expect(acknowledgement()).resolves.toEqual({ kind: "first" });
+      expect(mocks.loadConfirmedMealTimes).toHaveBeenCalledTimes(1);
+      expect(mocks.loadConfirmedMealTimes).toHaveBeenCalledWith(SUPABASE, "user-1");
+    });
 
-  it("does not add it outside the First Week", async () => {
-    saved();
-    mocks.reportGate.mockResolvedValue(readyGate("WEEKLY_CYCLE"));
-    expect(((await SavedPage(idProps())) as ReactElement<{ firstReport: boolean }>).props.firstReport).toBe(false);
+    it("passes a rotating line for the first meal of a later day", async () => {
+      saved();
+      mocks.loadConfirmedMealTimes.mockResolvedValue([new Date(NOW.getTime() - DAY), NOW]);
+      await expect(acknowledgement()).resolves.toEqual({ kind: "rotating", index: 0 });
+      mocks.loadConfirmedMealTimes.mockResolvedValue([new Date(NOW.getTime() - 2 * DAY), new Date(NOW.getTime() - DAY), NOW]);
+      await expect(acknowledgement()).resolves.toEqual({ kind: "rotating", index: 1 });
+    });
+
+    it("is decided from this meal's own time, so it does not depend on whether it is still the only meal (a revisit)", async () => {
+      saved();
+      mocks.loadSavedMeal.mockResolvedValue({ ok: true, value: savedValue({ entryId: "entry-2", isFirstMeal: false }) });
+      // Still the earliest meal of all: a deleted neighbour or a later meal does not change its line.
+      mocks.loadConfirmedMealTimes.mockResolvedValue([NOW, new Date(NOW.getTime() + 60_000)]);
+      await expect(acknowledgement()).resolves.toEqual({ kind: "first" });
+    });
+
+    it("passes no line for a second meal on the same day", async () => {
+      saved();
+      mocks.loadConfirmedMealTimes.mockResolvedValue([new Date(NOW.getTime() - 60 * 60_000), NOW]);
+      await expect(acknowledgement()).resolves.toEqual({ kind: "none" });
+    });
+
+    it("passes no line when the meal times cannot be read", async () => {
+      saved();
+      mocks.loadConfirmedMealTimes.mockResolvedValue(null);
+      await expect(acknowledgement()).resolves.toEqual({ kind: "none" });
+    });
+
+    it("passes no line, and reads nothing, outside the First Week", async () => {
+      saved();
+      mocks.reportGate.mockResolvedValue(readyGate("WEEKLY_CYCLE"));
+      await expect(acknowledgement()).resolves.toEqual({ kind: "none" });
+      expect(mocks.loadConfirmedMealTimes).not.toHaveBeenCalled();
+    });
+
+    it("keeps the delete control next to the line: both props are on the same Saved view", async () => {
+      saved();
+      const props = ((await SavedPage(idProps())) as ReactElement<{ acknowledgement: unknown; deletion: { entryId: string } | null }>).props;
+      expect(props.acknowledgement).toEqual({ kind: "first" });
+      expect(props.deletion?.entryId).toBe("entry-1");
+    });
   });
 
   it("shows the unavailable card when the saved meal cannot be read, with no delete control made up", async () => {

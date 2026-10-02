@@ -21,6 +21,12 @@ export const ANALYTICS_EVENTS = [
   "shabbat_started",
   "shabbat_report_completed",
   "recovery_returned",
+  "first_week_completed",
+  "first_week_card_snoozed",
+  "early_signal_answered",
+  "experiment_offered",
+  "experiment_skipped",
+  "experiment_wording_fallback",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

@@ -1,9 +1,14 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { NOT_SNOOZED } from "@/domain/firstWeekFlow";
 import { homePeriodsWindow, resolveTimeZone, type HomeFacts } from "@/domain/home";
-import type { OfflinePeriod, OfflineType } from "@/domain/offline";
+import type { OfflinePeriod } from "@/domain/offline";
+import { PATTERN_FLOW, decideEarlySignal } from "@/domain/patterns";
 import { DEFAULT_TIME_ZONE } from "@/i18n/config";
+import { loadFirstWeekProgress, loadFirstWeekSnooze } from "@/lib/firstWeek/load";
+import { parseOfflinePeriodRows } from "@/lib/offline/rows";
 import type { OnboardingContext } from "@/lib/onboarding/context";
+import { loadLateEveningSignal, loadQuietHours } from "@/lib/patterns/load";
 
 /**
  * The tables whose rows are CONFIRMED reports; any row in any of them means the user has reported.
@@ -14,30 +19,6 @@ export const REPORT_TABLES = ["meal_entries", "weight_entries", "activity_entrie
 /** Only a handful of periods can overlap the window; the cap just guards against runaway data. */
 const OFFLINE_ROW_LIMIT = 20;
 
-// A Record, so a new OfflineType is a compile error here until it is listed.
-const KNOWN_OFFLINE_TYPES: Record<OfflineType, true> = { SHABBAT: true, HOLIDAY: true, USER_DEFINED: true, VACATION: true };
-
-const isOfflineType = (v: unknown): v is OfflineType => typeof v === "string" && Object.hasOwn(KNOWN_OFFLINE_TYPES, v);
-
-function toDate(v: unknown): Date | null {
-  if (typeof v !== "string") return null;
-  const date = new Date(v);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-/** Rows with an unknown type or an unreadable date are dropped, not guessed. */
-function toPeriods(rows: unknown[]): OfflinePeriod[] {
-  const periods: OfflinePeriod[] = [];
-  for (const row of rows) {
-    if (typeof row !== "object" || row === null) continue;
-    const { type, start_at, end_at } = row as Record<string, unknown>;
-    const start = toDate(start_at);
-    const end = toDate(end_at);
-    if (isOfflineType(type) && start && end) periods.push({ type, start, end });
-  }
-  return periods;
-}
-
 /**
  * What Home needs to know, read as the signed-in user (RLS applies, no admin client). Never throws:
  * every fact that cannot be read is `null` (unknown) and Home still renders from the clock.
@@ -45,17 +26,55 @@ function toPeriods(rows: unknown[]): OfflinePeriod[] {
  * `facts.timeZone` is ALWAYS a valid IANA zone.
  */
 export async function loadHomeFacts(context: OnboardingContext, now: Date = new Date()): Promise<HomeFacts> {
-  const nothingKnown: HomeFacts = { now, timeZone: DEFAULT_TIME_ZONE, offlinePeriods: null, hasAnyReport: null };
+  const nothingKnown: HomeFacts = {
+    now,
+    timeZone: DEFAULT_TIME_ZONE,
+    offlinePeriods: null,
+    hasAnyReport: null,
+    lifecycle: null,
+    firstWeek: null,
+    firstWeekSnoozed: { ...NOT_SNOOZED },
+    earlySignal: null,
+    quietHours: null,
+  };
   if (context.kind !== "ready") return nothingKnown;
 
   try {
-    const [offlinePeriods, hasAnyReport] = await Promise.all([
-      loadOfflinePeriods(context.supabase, context.userId, now),
-      loadHasAnyReport(context.supabase, context.userId),
+    const { supabase, userId } = context;
+    const timeZone = resolveTimeZone(context.row.timezone);
+    const lifecycle = context.row.lifecycle_state;
+    // Every First Week read is FIRST_WEEK only: a WEEKLY_CYCLE Home pays for none of them, and none of their
+    // failures touches the two facts Home has always needed (they are independent loaders that never throw).
+    const inFirstWeek = lifecycle === "FIRST_WEEK";
+
+    const [offlinePeriods, hasAnyReport, firstWeek, firstWeekSnoozed, signal] = await Promise.all([
+      loadOfflinePeriods(supabase, userId, now),
+      loadHasAnyReport(supabase, userId),
+      inFirstWeek ? loadFirstWeekProgress(supabase, userId, timeZone, now) : Promise.resolve(null),
+      // Never null: a failed read is "not snoozed" (a card coming back is calm; a card hidden by a failed read would be invisible).
+      inFirstWeek ? loadFirstWeekSnooze(supabase, userId, now) : Promise.resolve({ ...NOT_SNOOZED }),
+      // Phase 2: the live meals and the pattern row. null = unknown, and then there is simply no card.
+      inFirstWeek && PATTERN_FLOW.earlySignalEnabled ? loadLateEveningSignal(supabase, userId, timeZone, now) : Promise.resolve(null),
     ]);
-    return { now, timeZone: resolveTimeZone(context.row.timezone), offlinePeriods, hasAnyReport };
+
+    // The data-level decision (pure); the resolver adds only the time-of-day rules.
+    const earlySignal = signal === null ? null : decideEarlySignal({ view: signal.view, row: signal.row, now });
+    // A second stage that runs only when a card is otherwise due: better silent than intrusive when unknown.
+    const quietHours = earlySignal?.due ? await loadQuietHours(supabase, userId) : null;
+
+    return {
+      now,
+      timeZone,
+      offlinePeriods,
+      hasAnyReport,
+      lifecycle,
+      firstWeek,
+      firstWeekSnoozed,
+      earlySignal,
+      quietHours,
+    };
   } catch {
-    // The two loaders catch their own failures; this only guards a malformed context.
+    // The loaders catch their own failures; this only guards a malformed context.
     console.error("Home: loading the facts failed unexpectedly");
     return nothingKnown;
   }
@@ -84,7 +103,7 @@ export async function loadOfflinePeriods(supabase: SupabaseClient, userId: strin
       console.error("Home: loading the offline periods failed", error.code);
       return null;
     }
-    return Array.isArray(data) ? toPeriods(data) : null;
+    return Array.isArray(data) ? parseOfflinePeriodRows(data) : null;
   } catch {
     console.error("Home: loading the offline periods threw");
     return null;

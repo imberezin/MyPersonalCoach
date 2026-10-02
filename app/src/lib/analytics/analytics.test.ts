@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { FIRST_WEEK_SNOOZE } from "@/domain/firstWeekFlow";
 import { ANALYTICS_EVENTS } from "./events";
 import { NoopSink, track, type AnalyticsEvent, type AnalyticsSink } from "./track";
 
@@ -28,8 +29,27 @@ describe("track", () => {
     await expect(track(new NoopSink(), "meal_saved", { note: longText })).rejects.toThrow(/content/);
   });
 
-  it("knows the 18 agreed events", () => {
-    expect(ANALYTICS_EVENTS).toHaveLength(18);
+  it("knows the 24 agreed events", () => {
+    expect(ANALYTICS_EVENTS).toHaveLength(24);
     expect(ANALYTICS_EVENTS).toContain("meal_deleted");
+  });
+
+  it("has the six First Week and first-experiment events, and the experiment_started that was already there", () => {
+    for (const name of [
+      "first_week_completed",
+      "first_week_card_snoozed",
+      "early_signal_answered",
+      "experiment_offered",
+      "experiment_skipped",
+      "experiment_wording_fallback",
+      "experiment_started",
+    ]) {
+      expect(ANALYTICS_EVENTS, name).toContain(name);
+    }
+    expect(new Set(ANALYTICS_EVENTS).size).toBe(ANALYTICS_EVENTS.length);
+  });
+
+  it("lists the event the snooze reader looks for, so the domain constant and the event list cannot drift", () => {
+    expect(ANALYTICS_EVENTS).toContain(FIRST_WEEK_SNOOZE.event);
   });
 });

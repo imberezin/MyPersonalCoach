@@ -19,7 +19,8 @@
     "local:reset": "supabase db reset",
     "local:migrate": "supabase migration up --local",
     "local:setup": "node scripts/local-setup.mjs",
-    "bakeoff": "node scripts/bake-off/cli.mjs"
+    "bakeoff": "node scripts/bake-off/cli.mjs",
+    "seed:demo": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
     "@hebcal/core": "^6.11.0",

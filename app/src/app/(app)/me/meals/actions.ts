@@ -6,8 +6,10 @@ import { MEALS_FORM, MEALS_ROUTES, clampPages, isUuid, parseDeleteFrom } from "@
 import { decideRoute } from "@/domain/onboarding";
 import { logAppError } from "@/lib/ai/ledger";
 import { SupabaseEventsSink, track } from "@/lib/analytics/track";
+import { currentInstant } from "@/lib/clock/now";
 import { deleteMealEntry } from "@/lib/food/repo";
 import { loadOnboardingContext, type OnboardingContext } from "@/lib/onboarding/context";
+import { refreshPatternsAfterMealChange } from "@/lib/patterns/refresh";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 type ReadyContext = Extract<OnboardingContext, { kind: "ready" }>;
@@ -60,6 +62,15 @@ export async function deleteMealAction(formData: FormData): Promise<void> {
   }
 
   if (deleted.value.deleted) await track(new SupabaseEventsSink(context.supabase), "meal_deleted", { from });
+  // Keeps the stored pattern mirror in step with the meals that remain, and only if the person already has a pattern row.
+  // It never changes the notice or the landing: no decision reads the mirror, and the next sync converges it.
+  if (deleted.value.deleted) {
+    try {
+      await refreshPatternsAfterMealChange(context, currentInstant());
+    } catch {
+      // Harmless.
+    }
+  }
 
   // Home may go back to its first-report state, and every page the person visited shows the meal: refresh them all.
   revalidatePath("/", "layout");

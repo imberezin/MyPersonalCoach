@@ -22,8 +22,10 @@ import { decideRoute } from "@/domain/onboarding";
 import { logAppError } from "@/lib/ai/ledger";
 import type { AnalyticsEventName, EventPayload } from "@/lib/analytics/events";
 import { SupabaseEventsSink, track } from "@/lib/analytics/track";
+import { currentInstant } from "@/lib/clock/now";
 import { confirmMeal, discardUnderstanding, loadUnderstanding, saveDraft } from "@/lib/food/repo";
 import { loadOnboardingContext, type OnboardingContext } from "@/lib/onboarding/context";
+import { refreshPatternsAfterMealChange } from "@/lib/patterns/refresh";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 type ReadyContext = Extract<OnboardingContext, { kind: "ready" }>;
@@ -131,6 +133,15 @@ export async function confirmMealAction(formData: FormData): Promise<void> {
       added: diff.added,
       removed: diff.removed,
     });
+  }
+
+  // The person pressed Save, so the stored pattern mirror may follow their meals. It does nothing at all unless the
+  // person already has a pattern row, and it takes the app's clock; the save itself and its events above keep the real
+  // one (a meal dated in real time must not be judged against a development clock). It never changes the landing.
+  try {
+    await refreshPatternsAfterMealChange(context, currentInstant());
+  } catch {
+    // Harmless: no decision reads the mirror, and the next sync converges it.
   }
 
   // Home no longer shows the first-report invitation, and Back must not return to the confirm screen.

@@ -1,11 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOME_FALLBACK_TIME_ZONE, homePeriodsWindow } from "@/domain/home";
+import { NOT_SNOOZED } from "@/domain/firstWeekFlow";
 import { normalizeRow } from "@/domain/onboarding";
 import { DEFAULT_TIME_ZONE } from "@/i18n/config";
 import type { OnboardingContext } from "@/lib/onboarding/context";
 import { createFakeReadSupabase, type FakeTable } from "./fakeReadSupabase";
 import { REPORT_TABLES, loadHasAnyReport, loadHomeFacts, loadOfflinePeriods } from "./load";
+
+// The switch is read at call time, so one mutable stand-in serves every case.
+const flow = vi.hoisted(() => ({ detectionEnabled: true, earlySignalEnabled: true, experimentEnabled: true, syncOnMealChange: true }));
+vi.mock("@/domain/patterns/types", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/domain/patterns/types")>()),
+  PATTERN_FLOW: flow,
+}));
 
 const USER = "00000000-0000-4000-8000-000000000001";
 const NOW = new Date("2027-01-09T16:00:00Z");
@@ -19,8 +27,10 @@ const SHABBAT_ROW = { type: "SHABBAT", start_at: "2027-01-08T14:10:00+00:00", en
 
 const allReportTables = (answer: FakeTable) => Object.fromEntries(REPORT_TABLES.map((table) => [table, answer]));
 
-function readyContext(supabase: SupabaseClient, timezone = "Asia/Jerusalem"): OnboardingContext {
-  const row = normalizeRow({ lifecycle_state: "FIRST_WEEK", timezone }, null);
+// Most cases below are about the two facts Home has always needed, so they use a lifecycle that reads nothing else;
+// the First Week describe passes "FIRST_WEEK" explicitly.
+function readyContext(supabase: SupabaseClient, timezone = "Asia/Jerusalem", lifecycle = "WEEKLY_CYCLE"): OnboardingContext {
+  const row = normalizeRow({ lifecycle_state: lifecycle, timezone }, null);
   if (!row) throw new Error("the fixture row did not normalize");
   return { kind: "ready", userId: USER, row, supabase };
 }
@@ -28,6 +38,8 @@ function readyContext(supabase: SupabaseClient, timezone = "Asia/Jerusalem"): On
 let errorLog: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  flow.detectionEnabled = true;
+  flow.earlySignalEnabled = true;
   // The loader logs failures (code only); keep the test output quiet.
   errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -55,6 +67,11 @@ describe("loadHomeFacts: no profile to read", () => {
         timeZone: DEFAULT_TIME_ZONE,
         offlinePeriods: null,
         hasAnyReport: null,
+        lifecycle: null,
+        firstWeek: null,
+        firstWeekSnoozed: NOT_SNOOZED,
+        earlySignal: null,
+        quietHours: null,
       });
       expect(queries).toEqual([]);
     },
@@ -79,7 +96,7 @@ describe("loadHomeFacts: ready", () => {
     expect((await loadHomeFacts(readyContext(client, timezone), NOW)).timeZone).toBe(HOME_FALLBACK_TIME_ZONE);
   });
 
-  it("makes exactly six queries: the periods and one probe per report table", async () => {
+  it("a WEEKLY_CYCLE context makes exactly six queries: the periods and one probe per report table", async () => {
     const { client, queries } = createFakeReadSupabase({ offline_periods: EMPTY, ...allReportTables(EMPTY) });
     await loadHomeFacts(readyContext(client), NOW);
     expect(queries.map((q) => q.table).sort()).toEqual(["offline_periods", ...REPORT_TABLES].sort());
@@ -110,6 +127,11 @@ describe("loadHomeFacts: ready", () => {
       timeZone: DEFAULT_TIME_ZONE,
       offlinePeriods: null,
       hasAnyReport: null,
+      lifecycle: null,
+      firstWeek: null,
+      firstWeekSnoozed: NOT_SNOOZED,
+      earlySignal: null,
+      quietHours: null,
     });
   });
 
@@ -137,6 +159,189 @@ describe("loadHomeFacts: ready", () => {
         expect(facts.hasAnyReport, `${offline} / ${picks.join(",")}`).toBe(expected);
       }
     }
+  });
+});
+
+describe("loadHomeFacts: First Week facts", () => {
+  const STARTED = "2027-01-04T10:00:00Z"; // Monday, 12:00 in Jerusalem (UTC+2 in January)
+  const evening = (id: string, day: number) => ({ id, confirmed_at: `2027-01-0${day}T19:30:00Z`, occurred_at: `2027-01-0${day}T19:30:00Z` }); // 21:30 local
+  const TWO_LATE_EVENINGS = [evening("m1", 5), evening("m2", 6)];
+  const THREE_LATE_EVENINGS = [...TWO_LATE_EVENINGS, evening("m3", 7)];
+
+  const firstWeekTables = (over: Record<string, FakeTable> = {}): Record<string, FakeTable> => ({
+    offline_periods: EMPTY,
+    ...allReportTables({ rows: TWO_LATE_EVENINGS }),
+    profiles: { rows: [{ first_week_started_at: STARTED }] },
+    events: EMPTY,
+    patterns: EMPTY,
+    user_preferences: { rows: [{ quiet_hours_start: "00:00:00", quiet_hours_end: "08:00:00" }] },
+    ...over,
+  });
+  const reportTablesWith = (rows: unknown[]): Record<string, FakeTable> => allReportTables({ rows });
+
+  const shape = (queries: Array<{ table: string; columns: string }>) => queries.map((q) => `${q.table}:${q.columns}`).sort();
+
+  const HOME_SIX = ["offline_periods:type, start_at, end_at", ...REPORT_TABLES.map((t) => `${t}:id`)];
+  // meal_entries is also one of the five report probes, so its Home probe reads `id` and the First Week reads differ.
+  const PHASE_ONE_FOUR = [
+    "profiles:first_week_started_at",
+    "meal_entries:confirmed_at",
+    "offline_periods:type, start_at, end_at",
+    "events:payload, occurred_at",
+  ];
+  const PHASE_TWO_TWO = ["meal_entries:id, occurred_at", "patterns:id, status, user_feedback, user_feedback_at"];
+  const QUIET = "user_preferences:quiet_hours_start, quiet_hours_end";
+
+  const firstWeek = (client: SupabaseClient) => readyContext(client, "Asia/Jerusalem", "FIRST_WEEK");
+
+  it("populates the lifecycle, the counts and the snooze flags", async () => {
+    const { client } = createFakeReadSupabase(firstWeekTables());
+    const facts = await loadHomeFacts(firstWeek(client), NOW);
+
+    expect(facts.lifecycle).toBe("FIRST_WEEK");
+    // Monday 4th to Friday 8th have ended; Saturday (the 9th) has not: five whole days, no offline rows.
+    expect(facts.firstWeek).toEqual({ availableDays: 5, confirmedMeals: 2, availableDaysSinceLastMeal: 2 });
+    expect(facts.firstWeekSnoozed).toEqual({ summary: false, welcomeBack: false });
+    expect(facts.timeZone).toBe("Asia/Jerusalem");
+  });
+
+  it("a FIRST_WEEK context makes the six queries, the Phase 1 four and the Phase 2 two (the recorded list, not a count)", async () => {
+    const answered = { id: "p1", status: "OBSERVATION", user_feedback: "confirm", user_feedback_at: "2027-01-08T10:00:00Z" };
+    const { client, queries } = createFakeReadSupabase(firstWeekTables({ patterns: { rows: [answered] } }));
+    await loadHomeFacts(firstWeek(client), NOW);
+    // The answered signal is not due, so the quiet hours are NOT read.
+    expect(shape(queries)).toEqual([...HOME_SIX, ...PHASE_ONE_FOUR, ...PHASE_TWO_TWO].sort());
+  });
+
+  it("the card is due: the quiet hours are read as a second stage, and only then", async () => {
+    const { client, queries } = createFakeReadSupabase(firstWeekTables());
+    const facts = await loadHomeFacts(firstWeek(client), NOW);
+
+    expect(facts.earlySignal).toEqual({ due: true, level: "EARLY_SIGNAL" });
+    expect(facts.quietHours).toEqual({ kind: "WINDOW", startMinute: 0, endMinute: 480 });
+    expect(shape(queries)).toEqual([...HOME_SIX, ...PHASE_ONE_FOUR, ...PHASE_TWO_TWO, QUIET].sort());
+    expect(queries.at(-1)?.table).toBe("user_preferences"); // after every other read
+  });
+
+  it("three evenings and no answer: due at the Candidate level", async () => {
+    const { client } = createFakeReadSupabase(firstWeekTables(reportTablesWith(THREE_LATE_EVENINGS)));
+    expect((await loadHomeFacts(firstWeek(client), NOW)).earlySignal).toEqual({ due: true, level: "CANDIDATE" });
+  });
+
+  it("the person answered 'Sounds right': not due, and the quiet hours are not read", async () => {
+    const answered = { id: "p1", status: "OBSERVATION", user_feedback: "confirm", user_feedback_at: "2027-01-08T10:00:00Z" };
+    const { client, queries } = createFakeReadSupabase(firstWeekTables({ patterns: { rows: [answered] } }));
+    const facts = await loadHomeFacts(firstWeek(client), NOW);
+    expect(facts.earlySignal).toEqual({ due: false, level: null });
+    expect(facts.quietHours).toBeNull();
+    expect(queries.map((q) => q.table)).not.toContain("user_preferences");
+  });
+
+  it("one late evening: nothing to say, no quiet-hours read", async () => {
+    const { client, queries } = createFakeReadSupabase(firstWeekTables(reportTablesWith(TWO_LATE_EVENINGS.slice(0, 1))));
+    const facts = await loadHomeFacts(firstWeek(client), NOW);
+    expect(facts.earlySignal).toEqual({ due: false, level: null });
+    expect(queries.map((q) => q.table)).not.toContain("user_preferences");
+  });
+
+  it("unknown quiet hours stay null (and Home says nothing rather than guess)", async () => {
+    const { client } = createFakeReadSupabase(firstWeekTables({ user_preferences: FAILS }));
+    const facts = await loadHomeFacts(firstWeek(client), NOW);
+    expect(facts.earlySignal?.due).toBe(true);
+    expect(facts.quietHours).toBeNull();
+  });
+
+  it("PATTERN_FLOW.earlySignalEnabled off: no signal query, earlySignal null", async () => {
+    flow.earlySignalEnabled = false;
+    const { client, queries } = createFakeReadSupabase(firstWeekTables());
+    const facts = await loadHomeFacts(firstWeek(client), NOW);
+    expect(facts.earlySignal).toBeNull();
+    expect(facts.quietHours).toBeNull();
+    expect(shape(queries)).toEqual([...HOME_SIX, ...PHASE_ONE_FOUR].sort());
+  });
+
+  it("PATTERN_FLOW.detectionEnabled off: the signal is unknown, so no card and no extra read", async () => {
+    flow.detectionEnabled = false;
+    const { client, queries } = createFakeReadSupabase(firstWeekTables());
+    const facts = await loadHomeFacts(firstWeek(client), NOW);
+    expect(facts.earlySignal).toBeNull();
+    expect(shape(queries)).toEqual([...HOME_SIX, ...PHASE_ONE_FOUR].sort());
+  });
+
+  it("WEEKLY_CYCLE: no First Week, snooze, signal or quiet-hours query at all", async () => {
+    const { client, queries } = createFakeReadSupabase(firstWeekTables());
+    const facts = await loadHomeFacts(readyContext(client, "Asia/Jerusalem", "WEEKLY_CYCLE"), NOW);
+
+    expect(shape(queries)).toEqual([...HOME_SIX].sort());
+    for (const table of ["events", "patterns", "user_preferences", "profiles"]) {
+      expect(queries.map((q) => q.table), table).not.toContain(table);
+    }
+    expect(facts).toMatchObject({ lifecycle: "WEEKLY_CYCLE", firstWeek: null, firstWeekSnoozed: NOT_SNOOZED, earlySignal: null, quietHours: null });
+  });
+
+  it.each(["NEW", "ONBOARDING"])("%s: the same, nothing First Week is read", async (lifecycle) => {
+    const { client, queries } = createFakeReadSupabase(firstWeekTables());
+    const facts = await loadHomeFacts(readyContext(client, "Asia/Jerusalem", lifecycle), NOW);
+    expect(shape(queries)).toEqual([...HOME_SIX].sort());
+    expect(facts.firstWeek).toBeNull();
+    expect(facts.lifecycle).toBe(lifecycle);
+  });
+
+  it("a failing First Week read leaves the offline periods and the report fact intact", async () => {
+    for (const profiles of [FAILS, THROWS]) {
+      const { client } = createFakeReadSupabase(firstWeekTables({ profiles, offline_periods: { rows: [SHABBAT_ROW] } }));
+      const facts = await loadHomeFacts(firstWeek(client), NOW);
+      expect(facts.firstWeek).toBeNull();
+      expect(facts.lifecycle).toBe("FIRST_WEEK");
+      expect(facts.offlinePeriods).toHaveLength(1);
+      expect(facts.hasAnyReport).toBe(true);
+    }
+  });
+
+  it("a failing snooze read is NOT_SNOOZED and leaves every other fact intact", async () => {
+    for (const events of [FAILS, THROWS]) {
+      const { client } = createFakeReadSupabase(firstWeekTables({ events }));
+      const facts = await loadHomeFacts(firstWeek(client), NOW);
+      expect(facts.firstWeekSnoozed).toEqual(NOT_SNOOZED);
+      expect(facts.firstWeek).not.toBeNull();
+      expect(facts.hasAnyReport).toBe(true);
+      expect(facts.earlySignal?.due).toBe(true);
+    }
+  });
+
+  it("a snooze pressed an hour ago hides that card", async () => {
+    const pressed = { payload: { card: "summary" }, occurred_at: new Date(NOW.getTime() - 3_600_000).toISOString() };
+    const { client } = createFakeReadSupabase(firstWeekTables({ events: { rows: [pressed] } }));
+    expect((await loadHomeFacts(firstWeek(client), NOW)).firstWeekSnoozed).toEqual({ summary: true, welcomeBack: false });
+  });
+
+  it("a failing signal read leaves every other fact intact and adds nothing to be degraded about", async () => {
+    for (const patterns of [FAILS, THROWS]) {
+      const { client } = createFakeReadSupabase(firstWeekTables({ patterns }));
+      const facts = await loadHomeFacts(firstWeek(client), NOW);
+      expect(facts.earlySignal).toBeNull();
+      expect(facts.quietHours).toBeNull();
+      expect(facts.firstWeek).not.toBeNull();
+      expect(facts.offlinePeriods).toEqual([]);
+      expect(facts.hasAnyReport).toBe(true);
+    }
+  });
+
+  it("holds the invariants of the facts for every lifecycle", async () => {
+    for (const lifecycle of ["NEW", "ONBOARDING", "FIRST_WEEK", "WEEKLY_CYCLE"]) {
+      const { client } = createFakeReadSupabase(firstWeekTables());
+      const facts = await loadHomeFacts(readyContext(client, "Asia/Jerusalem", lifecycle), NOW);
+      if (facts.firstWeek !== null || facts.earlySignal !== null) expect(facts.lifecycle).toBe("FIRST_WEEK");
+      if (facts.quietHours !== null) expect(facts.earlySignal?.due).toBe(true);
+      if (facts.lifecycle !== "FIRST_WEEK") expect(facts.firstWeekSnoozed).toEqual({ summary: false, welcomeBack: false });
+    }
+  });
+
+  it("a failing report probe keeps the First Week facts", async () => {
+    const { client } = createFakeReadSupabase(firstWeekTables({ weight_entries: FAILS, activity_entries: THROWS }));
+    const facts = await loadHomeFacts(firstWeek(client), NOW);
+    expect(facts.hasAnyReport).toBe(true); // meal_entries answered with rows
+    expect(facts.firstWeek).not.toBeNull();
   });
 });
 

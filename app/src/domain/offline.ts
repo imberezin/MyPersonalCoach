@@ -52,20 +52,32 @@ export function isAvailableDay(periods: readonly OfflinePeriod[], day: Pick<Loca
 }
 
 /**
+ * The most local days one count walks, whatever it finds. `cap` bounds the COUNT, not the walk (a long offline
+ * stretch, or a garbage `from` years in the past, would otherwise iterate day by day, each step building several
+ * Intl formatters), so beyond this the answer is simply "at least what was counted so far".
+ */
+export const MAX_SCAN_DAYS = 400;
+
+/**
  * Number of available days, counting whole local days from the day that contains `from`
  * (the day First Week began) up to the last day that has ended before `now`.
  * The day First Week began counts once it has ended. Days that are not yet over do not count.
+ * Counting stops once `cap` available days are found (callers that only compare against a threshold pass it),
+ * and never walks more than MAX_SCAN_DAYS days.
  */
 export function countAvailableDays(
   periods: readonly OfflinePeriod[],
   timeZone: string,
   from: Date,
   now: Date,
+  cap: number = Number.POSITIVE_INFINITY,
 ): number {
   let count = 0;
+  let walked = 0;
   let day = localDayOf(from, timeZone);
-  while (day.end.getTime() <= now.getTime()) {
+  while (day.end.getTime() <= now.getTime() && count < cap && walked < MAX_SCAN_DAYS) {
     if (isAvailableDay(periods, day)) count++;
+    walked++;
     day = localDayOf(day.end, timeZone);
   }
   return count;

@@ -6,14 +6,30 @@ import { buildMealSummary } from "@/components/meals/buildSummary";
 import { FlowUnavailable } from "@/components/food/FlowUnavailable";
 import { SavedView } from "@/components/food/SavedView";
 import { FOOD_ROUTES, isUuid } from "@/domain/food";
+import { acknowledgementFor, type Acknowledgement } from "@/domain/firstWeekFlow";
 import { getLocale, getTranslations } from "@/i18n/server";
+import { loadConfirmedMealTimes } from "@/lib/firstWeek/load";
 import { decideSavedFollowUp } from "@/lib/food/followUp";
 import { loadSavedMeal, loadUnderstanding } from "@/lib/food/repo";
+import type { OnboardingContext } from "@/lib/onboarding/context";
 import { openReportGate } from "../../_lib/gate";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("food");
   return { title: t("meta.title") };
+}
+
+/** The Saved line, or none: only in the First Week, and a meal-times read that fails (or comes back full) gives no line. */
+async function loadAcknowledgement(
+  context: Extract<OnboardingContext, { kind: "ready" }>,
+  thisMealAt: Date,
+  timeZone: string,
+): Promise<Acknowledgement> {
+  const lifecycle = context.row.lifecycle_state;
+  if (lifecycle !== "FIRST_WEEK") return { kind: "none" };
+  const mealTimes = await loadConfirmedMealTimes(context.supabase, context.userId);
+  if (mealTimes === null) return { kind: "none" };
+  return acknowledgementFor({ lifecycle, thisMealAt, mealTimes, timeZone });
 }
 
 // D8: the meal was added. Reached by `replace`, so Back skips the confirm screen.
@@ -38,13 +54,15 @@ export default async function FoodSavedPage(props: PageProps<"/report/food/[id]/
   if (!saved.ok) return <FlowUnavailable />;
 
   const followUp = decideSavedFollowUp({ mealId: saved.value.entryId, isFirstMeal: saved.value.isFirstMeal, lifecycle: row.lifecycle_state });
-  // The acknowledging line is for the very first meal, and only while the person is still in the First Week.
-  const firstReport = saved.value.isFirstMeal && row.lifecycle_state === "FIRST_WEEK";
+  // The calm line under "Saved": the warm one for the very first meal, then at most one rotating line a day. Decided
+  // from this meal's own confirm time against the person's other meals, so it is the same on a revisit and after a
+  // deletion; First Week only, and a read that fails gives no line.
+  const acknowledgement = await loadAcknowledgement(gate.context, saved.value.confirmedAt, gate.timeZone);
 
   // The quiet way to delete the meal that was just saved. This screen has no row that shows the meal, so
   // the question carries its summary; it is built here, from the stored meal, with the person's own zone.
   const [food, meals, locale] = await Promise.all([getTranslations("food"), getTranslations("meals"), getLocale()]);
   const summary = buildMealSummary(saved.value.meal, { now: gate.now, timeZone: gate.timeZone, locale, food, meals });
   const deletion = { entryId: saved.value.entryId, summary, action: deleteMealAction };
-  return <SavedView firstReport={firstReport} followUp={followUp} deletion={deletion} />;
+  return <SavedView acknowledgement={acknowledgement} followUp={followUp} deletion={deletion} />;
 }

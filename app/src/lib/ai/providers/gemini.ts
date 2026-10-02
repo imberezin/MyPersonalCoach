@@ -1,10 +1,12 @@
 import type { Locale } from "@/i18n/config";
 import { buildMealRequest, type PromptLanguage } from "../prompts/meal";
 import { MEAL_JSON_SCHEMA } from "../prompts/mealSchema";
+import { buildWordingRequest } from "../prompts/wording";
 import {
   ProviderError,
   type AIProvider,
   type CallContext,
+  type InsightContext,
   type MealInput,
   type ProviderReply,
 } from "../types";
@@ -54,8 +56,32 @@ export class GeminiProvider implements AIProvider {
     return Promise.reject(new ProviderError("unsupported"));
   }
 
-  generateInsight(): Promise<ProviderReply> {
-    return Promise.reject(new ProviderError("unsupported"));
+  /**
+   * The only insight operation implemented is the experiment wording: the context must be the closed fact shape of
+   * prompts/wording.ts (anything else throws before a request exists). Same endpoint, headers and error mapping as the meal path.
+   */
+  async generateInsight(context: InsightContext, ctx: CallContext): Promise<ProviderReply> {
+    const { apiKey, model, maxOutputTokens, thinkingLevel } = this.options;
+    if (!MODEL_ID.test(model)) throw new ProviderError("bad_request");
+
+    const request = buildWordingRequest(context);
+    const body = {
+      systemInstruction: { parts: [{ text: request.system }] },
+      contents: [{ role: "user", parts: [{ text: request.userText }] }],
+      generationConfig: {
+        maxOutputTokens,
+        responseMimeType: "application/json",
+        responseJsonSchema: request.jsonSchema,
+        ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
+      },
+    };
+
+    const json = await postJson(
+      `${GEMINI_ENDPOINT}/${model}:generateContent`,
+      { headers: { "x-goog-api-key": apiKey }, body },
+      { signal: ctx.signal, fetch: this.options.fetch },
+    );
+    return this.toReply(json, model);
   }
 
   detectPatternCandidate(): Promise<ProviderReply> {

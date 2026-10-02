@@ -1,7 +1,8 @@
 import type { Locale } from "@/i18n/config";
 import { buildMealRequest, type PromptLanguage } from "../prompts/meal";
 import { MEAL_JSON_SCHEMA, describeMealShape } from "../prompts/mealSchema";
-import { ProviderError, type AIProvider, type CallContext, type MealInput, type ProviderReply } from "../types";
+import { WORDING_JSON_SCHEMA, buildWordingRequest, describeWordingShape } from "../prompts/wording";
+import { ProviderError, type AIProvider, type CallContext, type InsightContext, type MealInput, type ProviderReply } from "../types";
 import { asCount, asRecord, imageMime, parseModelJson, postJson, toBase64 } from "./http";
 
 export const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
@@ -46,8 +47,37 @@ export class GroqProvider implements AIProvider {
     return Promise.reject(new ProviderError("unsupported"));
   }
 
-  generateInsight(): Promise<ProviderReply> {
-    return Promise.reject(new ProviderError("unsupported"));
+  /**
+   * The only insight operation implemented is the experiment wording: the context must be the closed fact shape of
+   * prompts/wording.ts (anything else throws before a request exists). Same endpoint, headers and error mapping as the meal path.
+   */
+  async generateInsight(context: InsightContext, ctx: CallContext): Promise<ProviderReply> {
+    const { apiKey, model, responseFormat, reasoningEffort, reasoningFormat, maxOutputTokens } = this.options;
+    const request = buildWordingRequest(context);
+
+    // JSON mode has no schema, so the shape is spelled out in the system text.
+    const system = responseFormat === "json_object" ? `${request.system}
+
+${describeWordingShape()}` : request.system;
+
+    const body = {
+      model,
+      temperature: 0.2,
+      max_completion_tokens: maxOutputTokens,
+      reasoning_effort: reasoningEffort,
+      reasoning_format: reasoningFormat,
+      response_format:
+        responseFormat === "json_schema"
+          ? { type: "json_schema", json_schema: { name: "experiment_wording", strict: true, schema: WORDING_JSON_SCHEMA } }
+          : { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: request.userText },
+      ],
+    };
+
+    const json = await postJson(GROQ_ENDPOINT, { headers: { Authorization: `Bearer ${apiKey}` }, body }, { signal: ctx.signal, fetch: this.options.fetch });
+    return this.toReply(json, model);
   }
 
   detectPatternCandidate(): Promise<ProviderReply> {

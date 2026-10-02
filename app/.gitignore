@@ -52,3 +52,6 @@ next-env.d.ts
 # Hebrew bake-off: your photos, their labels and the raw results stay on your computer (the repo is public)
 /bake-off/photos/
 /bake-off/results/
+
+# local dev clock (read only in development against the local Supabase; see src/lib/clock)
+/.dev-clock

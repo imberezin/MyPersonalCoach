@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { AIGateway } from "../gateway";
 import { MEAL_JSON_SCHEMA } from "../prompts/mealSchema";
-import { ProviderError } from "../types";
+import { MEAL_SYSTEM_PROMPT_HE } from "../prompts/meal";
+import { WORDING_JSON_SCHEMA, WORDING_SYSTEM_PROMPT_HE } from "../prompts/wording";
+import { ProviderError, type InsightContext } from "../types";
 import { GROQ_ENDPOINT, GroqProvider } from "./groq";
 
 const KEY = "test-groq-key-456";
@@ -172,7 +174,7 @@ describe("GroqProvider response", () => {
 
   it("the other operations are unsupported", async () => {
     const p = provider(fakeFetch(() => json({})).fetch);
-    for (const call of [p.transcribeVoice(), p.generateInsight(), p.detectPatternCandidate(), p.coach()]) {
+    for (const call of [p.transcribeVoice(), p.detectPatternCandidate(), p.coach()]) {
       const error = await call.catch((e) => e);
       expect(error.kind).toBe("unsupported");
     }
@@ -194,5 +196,120 @@ describe("GroqProvider through the gateway", () => {
     const result = await gateway.analyzeText({ text: "x", locale: "he" });
     expect(result).toMatchObject({ ok: false, reason: "all_providers_failed" });
     expect(records).toEqual(["error:rate_limited"]);
+  });
+});
+
+const SENTENCE = "At your next meal, sit down, put it on a plate, and take a few minutes without a screen.";
+const wordingContext = (over: Partial<InsightContext> = {}): InsightContext => ({
+  locale: "en",
+  interventionKey: "eat_intentionally",
+  variantId: "default",
+  facts: { approved_text: SENTENCE, scope: "next_meal", max_chars: 180, tone: "calm" },
+  ...over,
+});
+
+describe("GroqProvider meal path (regression guard for the wording change)", () => {
+  it("keeps the exact request body of a text report (JSON mode)", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse()));
+    await provider(doFetch).analyzeText({ text: "פיצה", locale: "he" }, ctx());
+    const body = calls[0].body as { messages: Message[] };
+    expect(Object.keys(calls[0].body)).toEqual([
+      "model",
+      "temperature",
+      "max_completion_tokens",
+      "reasoning_effort",
+      "reasoning_format",
+      "response_format",
+      "messages",
+    ]);
+    expect((body.messages[0].content as string).startsWith(`${MEAL_SYSTEM_PROMPT_HE}\n\nJSON shape: {"items"`)).toBe(true);
+    expect(body.messages[0].content as string).not.toContain("approved_text");
+    expect(body.messages[1]).toEqual({ role: "user", content: "<user_text>\nפיצה\n</user_text>" });
+  });
+});
+
+describe("GroqProvider generateInsight (the experiment wording)", () => {
+  const answer = { text: "At your next meal, sit down, put it on a plate, and take a few minutes without a screen, if you like." };
+
+  it("posts to chat completions with the key as a Bearer header only", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch).generateInsight(wordingContext(), ctx());
+    const [call] = calls;
+    expect(call.url).toBe(GROQ_ENDPOINT);
+    expect(call.url).not.toContain(KEY);
+    expect(call.init.headers).toMatchObject({ Authorization: `Bearer ${KEY}` });
+    expect(JSON.stringify(call.body)).not.toContain(KEY);
+  });
+
+  it("JSON mode: the wording system prompt and the shape in words, then a string user turn with the delimited sentence", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch).generateInsight(wordingContext(), ctx());
+    const body = calls[0].body;
+    expect(body.model).toBe("qwen/qwen3.8-27b");
+    expect(body.temperature).toBe(0.2);
+    expect(body.max_completion_tokens).toBe(2048);
+    expect(body.reasoning_effort).toBe("none");
+    expect(body.reasoning_format).toBe("hidden");
+    expect(body.response_format).toEqual({ type: "json_object" });
+    const [system, user] = body.messages as Message[];
+    expect(system.role).toBe("system");
+    expect(system.content).toBe(`${WORDING_SYSTEM_PROMPT_HE.replace("{max_chars}", "180")}\n\nJSON shape: {"text":string}`);
+    expect(user).toEqual({ role: "user", content: `<approved_text>\n${SENTENCE}\n</approved_text>` });
+  });
+
+  it("json_schema mode sends the strict wording schema and does not append the shape", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch, { responseFormat: "json_schema" }).generateInsight(wordingContext(), ctx());
+    expect(calls[0].body.response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "experiment_wording", strict: true, schema: JSON.parse(JSON.stringify(WORDING_JSON_SCHEMA)) },
+    });
+    expect((calls[0].body.messages as Message[])[0].content as string).not.toContain("JSON shape:");
+  });
+
+  it("parses the reply like the meal reply, a code fence and a reasoning block included", async () => {
+    const { fetch: doFetch } = fakeFetch(() => json(okResponse("<think>hm</think>\n```json\n" + JSON.stringify(answer) + "\n```")));
+    const reply = await provider(doFetch).generateInsight(wordingContext(), ctx());
+    expect(reply.output).toEqual(answer);
+    expect(reply.model).toBe("qwen/qwen3.8-27b");
+    expect(reply.usage).toEqual({ inputTokens: 2400, outputTokens: 90, reasoningTokens: undefined });
+  });
+
+  it("a context outside the closed shape throws before any request is made", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse()));
+    const bad = wordingContext({ facts: { approved_text: SENTENCE, scope: "anywhere", max_chars: 180, tone: "calm" } });
+    const error = await provider(doFetch).generateInsight(bad, ctx()).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).not.toContain("anywhere");
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    [401, "auth"],
+    [429, "rate_limited"],
+    [400, "bad_request"],
+    [500, "server"],
+  ])("HTTP %s -> %s, and the response body is never in the error", async (status, kind) => {
+    const { fetch: doFetch } = fakeFetch(() => json({ error: { message: `echo: ${SENTENCE}` } }, status));
+    const error = await provider(doFetch).generateInsight(wordingContext(), ctx()).catch((e) => e);
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error.kind).toBe(kind);
+    expect(error.message).not.toContain("sit down");
+  });
+
+  it("a content_filter finish is 'blocked'; no choices is a server failure", async () => {
+    const filtered = fakeFetch(() => json({ choices: [{ message: { content: "" }, finish_reason: "content_filter" }] }));
+    expect((await provider(filtered.fetch).generateInsight(wordingContext(), ctx()).catch((e) => e)).kind).toBe("blocked");
+    const none = fakeFetch(() => json({ choices: [] }));
+    expect((await provider(none.fetch).generateInsight(wordingContext(), ctx()).catch((e) => e)).kind).toBe("server");
+  });
+
+  it("through the gateway: a recorded good answer is a typed { text }, recorded as wordExperiment", async () => {
+    const good = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    const records: string[] = [];
+    const gateway = new AIGateway([provider(good.fetch)], { recorder: { record: (r) => void records.push(`${r.operation}:${r.outcome}`) } });
+    const result = await gateway.wordExperiment(wordingContext(), { retries: 0 });
+    expect(result).toMatchObject({ ok: true, provider: "groq", model: "qwen/qwen3.8-27b", value: answer });
+    expect(records).toEqual(["wordExperiment:ok"]);
   });
 });

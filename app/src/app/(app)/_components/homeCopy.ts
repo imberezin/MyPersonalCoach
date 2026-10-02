@@ -9,16 +9,24 @@ export interface HomeCopy {
   lead: string | null;
   body: string;
   /**
-   * Non-null exactly when the decision carries an action. `lead` is the sentence above the button;
-   * First Week Start says its piece in `copy.lead` and `copy.body` instead, so its own is null.
+   * Non-null exactly when the decision carries an action other than answering the Early Signal. `lead` is the
+   * sentence above the button; First Week Start and the summary card say their piece in `copy.lead` and
+   * `copy.body` instead, so their own is null. `snoozeLabel` is the "Not now" of the two First Week cards that
+   * can be put away for a day (the summary and the welcome-back), and null for every other state.
    */
-  invitation: { lead: string | null; cta: string } | null;
+  invitation: { lead: string | null; cta: string; snoozeLabel: string | null } | null;
+  /**
+   * The three answers of the Early Signal card (B4): non-null exactly for that state. They are equal in weight and
+   * come in the order of the spec; the card has no other button and no invitation.
+   */
+  earlySignal: { confirm: string; unsure: string; reject: string } | null;
   /** Non-null exactly when a fact was unknown. One calm sentence, never an error. */
   degradedNote: string | null;
 }
 
-// A candle for Shabbat in view or in progress, a moon for its end. A new copy key has to decide here
-// whether it has one, because the record is exhaustive.
+// A candle for Shabbat in view or in progress, a moon for its end, a light bulb for something I noticed (the insight
+// mark of the Brand document, section 23). A new copy key has to decide here whether it has one, because the record
+// is exhaustive.
 const EMOJI: Record<HomeCopyKey, string | null> = {
   morning: null,
   evening: null,
@@ -28,6 +36,10 @@ const EMOJI: Record<HomeCopyKey, string | null> = {
   silence: null,
   offlineShabbat: "🕯️",
   offlineOther: null,
+  firstWeekSummaryReady: null,
+  firstWeekSummaryReadyLittle: null,
+  firstWeekWelcomeBack: null,
+  earlySignalLateEvening: "💡",
 };
 
 // U+2066 (left-to-right isolate) and U+2069 (pop directional isolate): "16:10" stays one
@@ -47,10 +59,35 @@ function clockTime(instant: Date, locale: string, timeZone: string): string {
   return `${LTR_ISOLATE}${text}${POP_ISOLATE}`;
 }
 
-/** The button's words. First Week Start (B1) has its own, and no extra sentence above the button. */
-function invitationFor(key: HomeCopyKey, t: Translator): { lead: string | null; cta: string } {
-  if (key === "firstWeekStart") return { lead: null, cta: t("firstWeekStart.cta") };
-  return { lead: t("firstReport.lead"), cta: t("firstReport.cta") };
+/**
+ * The button's words. First Week Start (B1) and the summary card have their own, and no extra sentence above the
+ * button; the welcome-back card has its own sentence and button. The two cards that can be put away carry the label of
+ * their "Not now". The Early Signal card has no invitation at all: its three buttons are its answers.
+ */
+function invitationFor(key: HomeCopyKey, t: Translator): HomeCopy["invitation"] {
+  switch (key) {
+    case "firstWeekStart":
+      return { lead: null, cta: t("firstWeekStart.cta"), snoozeLabel: null };
+    case "firstWeekSummaryReady":
+    case "firstWeekSummaryReadyLittle":
+      return { lead: null, cta: t(`${key}.cta`), snoozeLabel: t("firstWeekSnooze") };
+    case "firstWeekWelcomeBack":
+      return { lead: t("firstWeekWelcomeBack.lead"), cta: t("firstWeekWelcomeBack.cta"), snoozeLabel: t("firstWeekSnooze") };
+    case "earlySignalLateEvening":
+      return null;
+    case "morning":
+    case "evening":
+    case "beforeShabbat":
+    case "motzeiShabbat":
+    case "silence":
+    case "offlineShabbat":
+    case "offlineOther":
+      return { lead: t("firstReport.lead"), cta: t("firstReport.cta"), snoozeLabel: null };
+    default: {
+      const unhandled: never = key;
+      return unhandled;
+    }
+  }
 }
 
 /**
@@ -72,7 +109,12 @@ export function homeCopyFor(
     title: t(`${key}.title`),
     lead: key === "firstWeekStart" ? t("firstWeekStart.lead") : null,
     body: t(`${key}.body`, values),
+    // The Early Signal card answers with its three buttons, so its action brings no invitation (invitationFor says null).
     invitation: decision.action ? invitationFor(key, t) : null,
+    earlySignal:
+      state.key === "EARLY_SIGNAL"
+        ? { confirm: t(`${key}.confirm`), unsure: t(`${key}.unsure`), reject: t(`${key}.reject`) }
+        : null,
     degradedNote: decision.degraded ? t("degraded") : null,
   };
 }

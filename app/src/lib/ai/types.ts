@@ -80,7 +80,7 @@ export interface AIProvider {
 
 /** One provider attempt, as the ledger sees it. No prompt, no text, no image, no response body. */
 export interface AiCallRecord {
-  operation: "analyzeMeal" | "analyzeText";
+  operation: "analyzeMeal" | "analyzeText" | "wordExperiment";
   provider: string;
   model: string | null;
   latencyMs: number;

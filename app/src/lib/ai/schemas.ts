@@ -126,6 +126,13 @@ export const transcriptSchema = z.object({
 
 export const insightSchema = z.object({ text: z.string().max(600) });
 
+/**
+ * The reworded experiment sentence. 1 to 400 characters is a hostile-size bound only, equal to the
+ * `experiments.wording` column check; the real cap and every other rule live in `validateWording`.
+ * Unknown keys are dropped.
+ */
+export const experimentWordingSchema = z.object({ text: z.string().min(1).max(400) });
+
 export const coachReplySchema = z.object({ text: z.string().max(1200) });
 
 export const patternCandidateSchema = z.object({
@@ -138,5 +145,6 @@ export const patternCandidatesSchema = z.array(patternCandidateSchema).max(10);
 export type MealUnderstanding = UnderstoodMeal;
 export type Transcript = z.infer<typeof transcriptSchema>;
 export type Insight = z.infer<typeof insightSchema>;
+export type ExperimentWording = z.infer<typeof experimentWordingSchema>;
 export type CoachReply = z.infer<typeof coachReplySchema>;
 export type PatternCandidate = z.infer<typeof patternCandidateSchema>;

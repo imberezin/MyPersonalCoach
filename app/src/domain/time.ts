@@ -5,6 +5,25 @@
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** The zone used when a profile's zone is not a valid IANA name. Must equal HOME_FALLBACK_TIME_ZONE and DEFAULT_TIME_ZONE (time.test.ts pins both). */
+const FALLBACK_TIME_ZONE = "Asia/Jerusalem";
+
+/**
+ * Returns `tz` when `new Intl.DateTimeFormat("en-US", { timeZone: tz })` accepts it, else "Asia/Jerusalem". Never
+ * throws. `profiles.timezone` is a `text not null` column with no check constraint, so every code path that
+ * reads it calls this before any Intl call. It lives here (below home/, firstWeekFlow/ and patterns/) so none
+ * of them imports another to reach it; `@/domain/home` re-exports it.
+ */
+export function resolveTimeZone(tz: string): string {
+  if (typeof tz !== "string") return FALLBACK_TIME_ZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return tz;
+  } catch {
+    return FALLBACK_TIME_ZONE;
+  }
+}
+
 interface ZonedParts {
   y: number;
   m: number; // 1-12

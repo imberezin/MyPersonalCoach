@@ -321,6 +321,30 @@
       "title": "The app is quiet now",
       "body": "There is no need to report. See you when this time ends."
     },
+    "firstWeekSummaryReady": {
+      "title": "We already know each other a little",
+      "body": "I have a few words about our first stretch together. When it suits you, take a look.",
+      "cta": "To the summary"
+    },
+    "firstWeekSummaryReadyLittle": {
+      "title": "Our first stretch",
+      "body": "We can look at how it went so far, with no pressure at all. When it suits you.",
+      "cta": "To the summary"
+    },
+    "firstWeekWelcomeBack": {
+      "title": "You're back",
+      "body": "That is exactly what matters. We continue from here.",
+      "lead": "When it suits you, tell me about one small thing.",
+      "cta": "A small report"
+    },
+    "firstWeekSnooze": "Not now",
+    "earlySignalLateEvening": {
+      "title": "Something small I noticed",
+      "body": "On a few evenings you reported a meal late in the evening. It is still too early to know whether it repeats for you. We will keep watching.",
+      "confirm": "Sounds right",
+      "unsure": "Not sure",
+      "reject": "Not related to me"
+    },
     "firstReport": {
       "lead": "When it suits you, tell me about one small thing. That is enough for a start.",
       "cta": "To the first report"
@@ -382,6 +406,93 @@
     "more": "Show more",
     "capNote": "Showing your most recent meals."
   },
+  "firstWeek": {
+    "meta": {
+      "title": "Our first summary"
+    },
+    "summary": {
+      "title": {
+        "enough": "We already know each other a little",
+        "neutral": "Our first stretch"
+      },
+      "lead": {
+        "enough": "I have started to understand a little of what goes on for you.",
+        "little": "There was less information in this stretch, and that is completely fine. We can keep getting to know each other slowly."
+      },
+      "why": {
+        "title": "Why we started",
+        "goalsLead": "At the start you told me what matters to you:",
+        "focus": {
+          "lose_weight": "Getting to a weight that feels right",
+          "feel_lighter": "Feeling lighter and healthier",
+          "improve_eating": "Eating in a way that feels better",
+          "be_active": "Moving a little more",
+          "understand_overeating": "Understanding better what drives your eating"
+        },
+        "notSure": "At the start you told me you're not yet sure exactly what you'd like to change, and that is completely fine.",
+        "goalSet": "At the start you told me there is a change that matters to you.",
+        "motivationLead": "In your own words:",
+        "link": "What we learn here about your eating is the base for that change, one small step at a time.",
+        "linkNotSure": "What we learn here about your eating will help you see the way, at your own pace."
+      },
+      "did": {
+        "title": "What you did",
+        "meals": "You reported meals.",
+        "none": "No meals have been saved yet, and that is fine. We can begin whenever it suits you.",
+        "experiment": "You started a small experiment."
+      },
+      "noticed": {
+        "title": "What we noticed",
+        "notEnough": "It is still too early to say what repeats for you, and I do not want to guess. With more reports, the picture will get sharper.",
+        "lateEvening": "On a few evenings you reported a meal late in the evening. We will keep checking whether it repeats, with no rush to draw conclusions."
+      },
+      "moment": {
+        "title": "A meaningful moment",
+        "returned": "You came back after a few days, and that is exactly what matters.",
+        "firstReport": "Your first report was saved. That is where we began to get to know each other."
+      },
+      "next": {
+        "title": "And what now?",
+        "none": "For now there is no small experiment worth suggesting, and that is fine. When there is one, I will suggest it, and you can choose not to.",
+        "offer": "There is one small thing we could try, if you like. Or not.",
+        "choose": "Let's choose together",
+        "pending": "I have a small idea waiting for you. When it suits you, take a look.",
+        "see": "Take a look",
+        "active": "The small experiment you chose:"
+      },
+      "continue": "Let's continue",
+      "continueNote": "Once we continue, the first stretch is closed and cannot be reopened.",
+      "notNow": "Not now"
+    },
+    "problem": {
+      "save": "I could not save just now. You can try again in a moment."
+    },
+    "unavailable": {
+      "title": "I could not load this just now",
+      "body": "That is fine. You can go back to Home and try again in a moment.",
+      "home": "Back to Home"
+    },
+    "ack": {
+      "rotating": {
+        "0": "This helps me get to know your rhythm.",
+        "1": "Thank you. One more small piece of the picture.",
+        "2": "Got it. There is nothing more you need to do now."
+      }
+    },
+    "experiment": {
+      "meta": {
+        "title": "A small experiment"
+      },
+      "title": "Want to try something small?",
+      "lead": "I noticed there is sometimes a meal late in the evening. So here is one small thing, if you like:",
+      "try": "I'll try",
+      "notThisTime": "Not this time",
+      "note": "This is not required, and you can say no.",
+      "activeTitle": "Your small experiment has started",
+      "activeBody": "There is nothing you need to report. You can simply try it when it fits.",
+      "back": "Back to the summary"
+    }
+  },
   "notFound": {
     "title": "This page was not found",
     "body": "You can go back to Home and continue from there.",
@@ -401,7 +512,8 @@
     "replayOnboardingHint": "Development only. Your answers are kept and shown on each screen.",
     "backend": "Database",
     "backendLocal": "Local (Docker)",
-    "backendHosted": "Hosted (Supabase)"
+    "backendHosted": "Hosted (Supabase)",
+    "clockOverride": "Dev clock active: {time}"
   },
   "interventions": {
     "pause": {
