@@ -30,6 +30,9 @@ export const ANALYTICS_EVENTS = [
   "experiment_offered",
   "experiment_skipped",
   "experiment_wording_fallback",
+  "weekly_card_snoozed",
+  "pattern_question_answered",
+  "weekly_line_wording_fallback",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

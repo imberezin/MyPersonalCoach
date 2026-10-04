@@ -1,6 +1,7 @@
 import type { Locale } from "@/i18n/config";
 import { buildMealRequest, type PromptLanguage } from "../prompts/meal";
 import { MEAL_JSON_SCHEMA } from "../prompts/mealSchema";
+import { buildWeeklyLineRequest, isWeeklyLineContext } from "../prompts/weeklyLine";
 import { buildWordingRequest } from "../prompts/wording";
 import {
   ProviderError,
@@ -57,14 +58,15 @@ export class GeminiProvider implements AIProvider {
   }
 
   /**
-   * The only insight operation implemented is the experiment wording: the context must be the closed fact shape of
-   * prompts/wording.ts (anything else throws before a request exists). Same endpoint, headers and error mapping as the meal path.
+   * The only insight operations implemented are the two wordings: the context must be the closed fact shape of
+   * prompts/wording.ts (the experiment sentence) or, when `facts.purpose` is "weekly_line", of prompts/weeklyLine.ts
+   * (anything else throws before a request exists). Same endpoint, headers and error mapping as the meal path.
    */
   async generateInsight(context: InsightContext, ctx: CallContext): Promise<ProviderReply> {
     const { apiKey, model, maxOutputTokens, thinkingLevel } = this.options;
     if (!MODEL_ID.test(model)) throw new ProviderError("bad_request");
 
-    const request = buildWordingRequest(context);
+    const request = isWeeklyLineContext(context) ? buildWeeklyLineRequest(context) : buildWordingRequest(context);
     const body = {
       systemInstruction: { parts: [{ text: request.system }] },
       contents: [{ role: "user", parts: [{ text: request.userText }] }],

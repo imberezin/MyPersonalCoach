@@ -6,6 +6,7 @@ import {
   mealUnderstandingSchema,
   patternCandidatesSchema,
   transcriptSchema,
+  weeklyLineSchema,
 } from "./schemas";
 import type {
   AIProvider,
@@ -127,6 +128,14 @@ export class AIGateway {
     return this.run("wordExperiment", (p, ctx) => p.generateInsight(context, ctx), experimentWordingSchema, options);
   }
 
+  /**
+   * Rewords the one approved opening sentence of the weekly story (Weekly Learning, a sibling of `wordExperiment`).
+   * `context.facts` is the closed shape of prompts/weeklyLine.ts. Recorded in the ledger as "wordWeeklyLine", one row per attempt.
+   */
+  wordWeeklyLine(context: InsightContext, options?: CallOptions) {
+    return this.run("wordWeeklyLine", (p, ctx) => p.generateInsight(context, ctx), weeklyLineSchema, options);
+  }
+
   detectPatternCandidate(events: Parameters<AIProvider["detectPatternCandidate"]>[0], options?: CallOptions) {
     return this.run(null, (p, ctx) => p.detectPatternCandidate(events, ctx), patternCandidatesSchema, options);
   }
@@ -166,7 +175,7 @@ export class AIGateway {
     const startedAt = this.clock();
     let budgetExhausted = false;
 
-    // Only the meal operations and the experiment wording are in the ledger; the other operations record nothing.
+    // Only the meal operations and the two wording operations are in the ledger; the other operations record nothing.
     const recordOf = (
       provider: AIProvider,
       attemptStart: number,

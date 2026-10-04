@@ -24,6 +24,7 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     earlySignal: { due: true, level: "EARLY_SIGNAL" },
     quietHours: { kind: "NONE" },
     milestone: null,
+    weekly: null,
     ...overrides,
   };
 }

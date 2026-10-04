@@ -317,3 +317,91 @@ describe("wordExperiment", () => {
     expect(records).toEqual([]);
   });
 });
+
+describe("wordWeeklyLine", () => {
+  const SENTENCE = "One more small piece fell into the picture of what suits you.";
+  const weekly: InsightContext = {
+    locale: "en",
+    facts: { purpose: "weekly_line", approved_text: SENTENCE, max_chars: 180, tone: "calm" },
+  };
+
+  it("returns a typed { text } from the fake provider, with its provider and model", async () => {
+    const result = await new AIGateway([new FakeAIProvider()]).wordWeeklyLine(weekly);
+    expect(result).toMatchObject({ ok: true, provider: "fake", model: "fake-1" });
+    if (result.ok) expect(result.value).toEqual({ text: SENTENCE.replace(/.$/, "") + ", if you like." });
+  });
+
+  it("records operation wordWeeklyLine for every attempt (ok, invalid_output, error, timeout) and never a prompt, a text or the answer", async () => {
+    const { records, recorder } = collector();
+    const slow = new FakeAIProvider("slow", { wording: "wording_slow" });
+    const down = new FakeAIProvider("down", { wording: "wording_fail" });
+    const invalid = new FakeAIProvider("invalid", { wording: "wording_invalid" });
+    const good = new FakeAIProvider("good");
+    const result = await new AIGateway([slow, down, invalid, good], { recorder }).wordWeeklyLine(weekly, { timeoutMs: 20, retries: 0 });
+    expect(result).toMatchObject({ ok: true, provider: "good" });
+    expect(records.map((r) => [r.operation, r.provider, r.outcome])).toEqual([
+      ["wordWeeklyLine", "slow", "timeout"],
+      ["wordWeeklyLine", "down", "error"],
+      ["wordWeeklyLine", "invalid", "invalid_output"],
+      ["wordWeeklyLine", "good", "ok"],
+    ]);
+    const serialized = JSON.stringify(records);
+    expect(serialized).not.toContain("small piece");
+    expect(serialized).not.toContain("approved_text");
+    expect(Object.keys(records[3]).sort()).toEqual(["errorKind", "inputTokens", "latencyMs", "model", "operation", "outcome", "outputTokens", "provider"]);
+  });
+
+  it("records nothing when no attempt is made (no providers)", async () => {
+    const { records, recorder } = collector();
+    const result = await new AIGateway([], { recorder }).wordWeeklyLine(weekly);
+    expect(result).toEqual({ ok: false, reason: "no_providers", attempts: [] });
+    expect(records).toEqual([]);
+  });
+
+  it("an invalid answer with retries: 0 makes ONE attempt; without it the gateway default (1 retry) applies", async () => {
+    let calls = 0;
+    const bad = new FakeAIProvider("bad", { wording: "wording_invalid" });
+    const original = bad.generateInsight.bind(bad);
+    bad.generateInsight = (context, ctx) => {
+      calls++;
+      return original(context, ctx);
+    };
+    const result = await new AIGateway([bad]).wordWeeklyLine(weekly, { retries: 0 });
+    expect(result).toMatchObject({ ok: false, reason: "all_providers_failed" });
+    expect(calls).toBe(1);
+    calls = 0;
+    await new AIGateway([bad]).wordWeeklyLine(weekly);
+    expect(calls).toBe(2);
+  });
+
+  it("a total budget under the 2 s minimum attempt starts nothing and says budget_exhausted", async () => {
+    let calls = 0;
+    const provider = new FakeAIProvider();
+    const original = provider.generateInsight.bind(provider);
+    provider.generateInsight = (context, ctx) => {
+      calls++;
+      return original(context, ctx);
+    };
+    const { records, recorder } = collector();
+    const result = await new AIGateway([provider], { recorder }).wordWeeklyLine(weekly, { totalBudgetMs: 1_000, retries: 0 });
+    expect(result).toMatchObject({ ok: false, reason: "budget_exhausted" });
+    expect(calls).toBe(0);
+    expect(records).toEqual([]);
+  });
+
+  it("never throws: a provider that throws (a malformed context in a real adapter) is a failed attempt", async () => {
+    const provider = new FakeAIProvider("real-like");
+    provider.generateInsight = () => Promise.reject(new Error("weekly_line_facts_shape"));
+    const result = await new AIGateway([provider]).wordWeeklyLine(weekly, { retries: 0 });
+    expect(result).toEqual({ ok: false, reason: "all_providers_failed", attempts: [{ provider: "real-like", error: "weekly_line_facts_shape" }] });
+  });
+
+  it("the meal and experiment operations keep their own ledger names", async () => {
+    const { records, recorder } = collector();
+    const gateway = new AIGateway([new FakeAIProvider()], { recorder });
+    await gateway.wordExperiment({ locale: "en", facts: { approved_text: SENTENCE, scope: "next_meal", max_chars: 180, tone: "calm" } }, { retries: 0 });
+    await gateway.wordWeeklyLine(weekly, { retries: 0 });
+    await gateway.analyzeText({ text: "rice", locale: "en" });
+    expect(records.map((r) => r.operation)).toEqual(["wordExperiment", "wordWeeklyLine", "analyzeText"]);
+  });
+});

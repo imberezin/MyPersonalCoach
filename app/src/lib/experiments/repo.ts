@@ -124,10 +124,12 @@ export async function loadExperiments(
  * violation on `experiments_one_open` (23505) means an open experiment already exists (a double tap, a second tab, an
  * earlier press still waiting for the AI): that row's id comes back with `created: false`, and the caller makes no AI
  * call and emits nothing. RLS scopes the lookup of that row to the person.
+ * `patternId` is null for a weekly STARTER offer (a goal-led proposal that is not about a pattern): `source_pattern_id`
+ * is then written as null.
  */
 export async function insertOfferedExperiment(
   supabase: SupabaseClient,
-  a: { patternId: string; key: InterventionKey; variantId: string; libraryText: string; locale: "he" | "en" },
+  a: { patternId: string | null; key: InterventionKey; variantId: string; libraryText: string; locale: "he" | "en" },
 ): Promise<RepoResult<{ id: string; created: boolean }>> {
   try {
     const { data, error } = await supabase

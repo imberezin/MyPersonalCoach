@@ -4,6 +4,7 @@ import { isOffline, type OfflinePeriod } from "../offline";
 import { LATE_EVENING, PATTERN_FLOW } from "../patterns/types";
 import { isQuiet } from "../quietHours";
 import { localMinuteOfDay, resolveTimeZone } from "../time";
+import { WEEKLY_FLOW } from "../weekly/types";
 import { WEIGHT_FLOW } from "../weight/types";
 import {
   HOME_FEATURES,
@@ -94,6 +95,15 @@ function resolveState(facts: HomeFacts, timeZone: string): HomeState {
     if (ended) return { key: "MOTZEI_SHABBAT", havdalah: ended.end };
   }
 
+  // Weekly Learning (row 3b): "your week" is ready. It sits right under the Shabbat states (they keep their short exact windows;
+  // the card is a Sunday-morning thing and simply waits for them) and above everything else, replacing the clock sentence while it
+  // is due. It needs lifecycle WEEKLY_CYCLE and a loaded fact that says the card is still untouched (the loader already applied
+  // the opened and snoozed states), so another lifecycle or a stale non-null fact can never create it; it is disjoint from the
+  // First Week rows below by construction. (`?? null`: the resolver is total, so a caller that predates this fact reads it as
+  // "no weekly moment" instead of throwing.)
+  const weekly = facts.weekly ?? null;
+  if (WEEKLY_FLOW.enabled && lifecycle === "WEEKLY_CYCLE" && weekly !== null && weekly.card) return { key: "WEEKLY_SUMMARY_READY" };
+
   // The First Week cards. Every one needs lifecycle FIRST_WEEK and a loaded fact: an unknown fact is silence, so
   // another lifecycle (or a stale non-null fact) can never create one of them. The step the rules are at is derived
   // from live counts here, never stored.
@@ -174,6 +184,7 @@ function invitesFirstReport(state: HomeState): boolean {
     case "FIRST_WEEK_WELCOME_BACK":
     case "EARLY_SIGNAL":
     case "MILESTONE_REACHED":
+    case "WEEKLY_SUMMARY_READY":
       // They carry their own action (resolveAction), never the first-report invitation.
       return false;
     case "SILENCE":
@@ -185,7 +196,7 @@ function invitesFirstReport(state: HomeState): boolean {
 }
 
 function resolveAction(state: HomeState, facts: HomeFacts): HomeAction | null {
-  // The First Week states and the milestone carry their own action, whatever the report fact says.
+  // The First Week states, the milestone and the weekly card carry their own action, whatever the report fact says.
   switch (state.key) {
     case "FIRST_WEEK_SUMMARY_READY":
       return { kind: "OPEN_FIRST_WEEK_SUMMARY" };
@@ -195,6 +206,8 @@ function resolveAction(state: HomeState, facts: HomeFacts): HomeAction | null {
       return { kind: "ANSWER_EARLY_SIGNAL" };
     case "MILESTONE_REACHED":
       return { kind: "OPEN_PROGRESS", week: state.week };
+    case "WEEKLY_SUMMARY_READY":
+      return { kind: "OPEN_WEEKLY_STORY" };
     default:
       break;
   }
@@ -204,19 +217,32 @@ function resolveAction(state: HomeState, facts: HomeFacts): HomeAction | null {
 }
 
 /**
- * Pure, total, never throws. Precedence: offline > before Shabbat > Motzei Shabbat > First Week summary ready >
- * First Week welcome back > milestone reached > Early Signal > first week start > evening > morning > silence.
+ * True iff the weekly card was already opened or snoozed in WEEKLY_CYCLE (the loader says so with `card: false`) and Home is in
+ * one of its calm clock states: the quiet "Your week" link. The Shabbat and offline states stay silent, and the link is never
+ * beside the card itself (`card: true` gives the card and no link).
+ */
+function weeklyLinkShown(facts: HomeFacts, state: HomeState): boolean {
+  const weekly = facts.weekly ?? null;
+  if (!WEEKLY_FLOW.enabled || facts.lifecycle !== "WEEKLY_CYCLE" || weekly === null || weekly.card) return false;
+  return state.key === "MORNING" || state.key === "EVENING" || (state.key === "SILENCE" && state.reason === "NOTHING_TO_SAY");
+}
+
+/**
+ * Pure, total, never throws. Precedence: offline > before Shabbat > Motzei Shabbat > weekly summary ready (WEEKLY_CYCLE) >
+ * First Week summary ready > First Week welcome back > milestone reached > Early Signal > first week start > evening >
+ * morning > silence.
  */
 export function resolveHome(facts: HomeFacts): HomeDecision {
   // An invalid instant cannot be formatted at all; say nothing rather than throw.
   if (Number.isNaN(facts.now.getTime())) {
-    return { state: { key: "SILENCE", reason: "NOTHING_TO_SAY" }, action: null, degraded: true };
+    return { state: { key: "SILENCE", reason: "NOTHING_TO_SAY" }, action: null, degraded: true, weeklyLink: false };
   }
 
   const state = resolveState(facts, resolveTimeZone(facts.timeZone));
   return {
     state,
     action: resolveAction(state, facts),
+    weeklyLink: weeklyLinkShown(facts, state),
     // An unknown earlySignal or quietHours does NOT degrade Home: the card is a bonus, not a fact Home needs.
     degraded:
       facts.offlinePeriods === null ||
@@ -245,6 +271,8 @@ export function homeCopyKey(state: HomeState): HomeCopyKey {
       return "firstWeekWelcomeBack";
     case "MILESTONE_REACHED":
       return state.isGoal ? "milestoneGoalReached" : "milestoneReached";
+    case "WEEKLY_SUMMARY_READY":
+      return "weeklyReady";
     case "EARLY_SIGNAL":
       switch (state.signal) {
         case "late_evening_meals":

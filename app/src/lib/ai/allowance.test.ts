@@ -52,13 +52,35 @@ describe("checkAiAllowance", () => {
     const { client, queries } = ledger([row("2026-10-01T06:00:00Z"), row("2026-10-01T07:00:00Z", "analyzeMeal"), row("2026-10-01T07:30:00Z", "coach")]);
     expect(await checkAiAllowance(client, args)).toEqual({ allowed: true, usedToday: 2 });
     expect(queries.every((q) => q.table === "ai_requests" && q.column === "id")).toBe(true);
-    expect(queries[0].ops).toEqual(["analyzeMeal", "analyzeText", "wordExperiment"]);
+    expect(queries[0].ops).toEqual(["analyzeMeal", "analyzeText", "wordExperiment", "wordWeeklyLine"]);
   });
 
   it("counts the experiment wording like a meal call: attempts of wordExperiment alone reach the daily cap", async () => {
     const rows = Array.from({ length: 5 }, (_, i) => row(`2026-10-01T05:${String(i).padStart(2, "0")}:00Z`, "wordExperiment"));
     expect(await checkAiAllowance(ledger(rows).client, { ...args, dailyCap: 5 })).toEqual({ allowed: false, reason: "daily_cap" });
     expect(await checkAiAllowance(ledger(rows).client, { ...args, dailyCap: 6 })).toEqual({ allowed: true, usedToday: 5 });
+  });
+
+  it("counts the weekly opening line like a meal call: attempts of wordWeeklyLine alone reach the daily cap", async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => row(`2026-10-01T05:${String(i).padStart(2, "0")}:00Z`, "wordWeeklyLine"));
+    expect(await checkAiAllowance(ledger(rows).client, { ...args, dailyCap: 5 })).toEqual({ allowed: false, reason: "daily_cap" });
+    expect(await checkAiAllowance(ledger(rows).client, { ...args, dailyCap: 6 })).toEqual({ allowed: true, usedToday: 5 });
+  });
+
+  it("the two wording operations and the meal calls share one daily budget", async () => {
+    const rows = [
+      row("2026-10-01T05:00:00Z", "analyzeText"),
+      row("2026-10-01T05:01:00Z", "wordExperiment"),
+      row("2026-10-01T05:02:00Z", "wordWeeklyLine"),
+      row("2026-10-01T05:03:00Z", "coach"),
+    ];
+    expect(await checkAiAllowance(ledger(rows).client, { ...args, dailyCap: 3 })).toEqual({ allowed: false, reason: "daily_cap" });
+    expect(await checkAiAllowance(ledger(rows).client, { ...args, dailyCap: 4 })).toEqual({ allowed: true, usedToday: 3 });
+  });
+
+  it("a weekly line attempt counts toward the per-minute cap", async () => {
+    const recent = [row("2026-10-01T08:59:30Z", "wordWeeklyLine"), row("2026-10-01T08:59:40Z", "wordExperiment"), row("2026-10-01T08:59:50Z", "wordWeeklyLine")];
+    expect(await checkAiAllowance(ledger(recent).client, args)).toEqual({ allowed: false, reason: "rate_limited" });
   });
 
   it("counts them toward the per-minute cap too", async () => {

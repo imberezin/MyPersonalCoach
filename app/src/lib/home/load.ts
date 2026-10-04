@@ -4,12 +4,14 @@ import { NOT_SNOOZED } from "@/domain/firstWeekFlow";
 import { homePeriodsWindow, resolveTimeZone, type HomeFacts } from "@/domain/home";
 import type { OfflinePeriod } from "@/domain/offline";
 import { PATTERN_FLOW, decideEarlySignal } from "@/domain/patterns";
+import { WEEKLY_FLOW } from "@/domain/weekly";
 import { DEFAULT_TIME_ZONE } from "@/i18n/config";
 import { loadFirstWeekProgress, loadFirstWeekSnooze } from "@/lib/firstWeek/load";
 import { parseOfflinePeriodRows } from "@/lib/offline/rows";
 import type { OnboardingContext } from "@/lib/onboarding/context";
 import { loadLateEveningSignal, loadQuietHours } from "@/lib/patterns/load";
 import { loadMilestoneMoment } from "@/lib/weight/load";
+import { loadWeeklyHomeFact } from "@/lib/weekly/home";
 
 /**
  * The tables whose rows are CONFIRMED reports; any row in any of them means the user has reported.
@@ -38,6 +40,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
     earlySignal: null,
     quietHours: null,
     milestone: null,
+    weekly: null,
   };
   if (context.kind !== "ready") return nothingKnown;
 
@@ -49,7 +52,9 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
     // failures touches the two facts Home has always needed (they are independent loaders that never throw).
     const inFirstWeek = lifecycle === "FIRST_WEEK";
 
-    const [offlinePeriods, hasAnyReport, firstWeek, firstWeekSnoozed, signal, milestone] = await Promise.all([
+    const inWeeklyCycle = lifecycle === "WEEKLY_CYCLE";
+
+    const [offlinePeriods, hasAnyReport, firstWeek, firstWeekSnoozed, signal, milestone, weekly] = await Promise.all([
       loadOfflinePeriods(supabase, userId, now),
       loadHasAnyReport(supabase, userId),
       inFirstWeek ? loadFirstWeekProgress(supabase, userId, timeZone, now) : Promise.resolve(null),
@@ -60,6 +65,9 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
       // The weight series, read only for a person with a numeric goal below the start weight (zero queries otherwise).
       // null = no moment or unknown, and unknown is silence: it never changes any other fact.
       loadMilestoneMoment(context, now),
+      // Weekly Learning: WEEKLY_CYCLE only, and the loader itself makes no query outside the card window (Sunday 05:00 to
+      // Wednesday 05:00). null = nothing to show, or unknown: it never changes any other fact and never sets `degraded`.
+      inWeeklyCycle && WEEKLY_FLOW.enabled ? loadWeeklyHomeFact(supabase, userId, { timeZone, now }) : Promise.resolve(null),
     ]);
 
     // The data-level decision (pure); the resolver adds only the time-of-day rules.
@@ -78,6 +86,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
       earlySignal,
       quietHours,
       milestone,
+      weekly,
     };
   } catch {
     // The loaders catch their own failures; this only guards a malformed context.

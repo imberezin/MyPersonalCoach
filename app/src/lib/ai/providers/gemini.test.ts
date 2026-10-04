@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AIGateway } from "../gateway";
 import { MEAL_JSON_SCHEMA } from "../prompts/mealSchema";
 import { MEAL_SYSTEM_PROMPT_HE } from "../prompts/meal";
+import { WEEKLY_LINE_SYSTEM_PROMPT_HE } from "../prompts/weeklyLine";
 import { WORDING_SYSTEM_PROMPT_HE } from "../prompts/wording";
 import { ProviderError, type InsightContext } from "../types";
 import { GEMINI_ENDPOINT, GeminiProvider } from "./gemini";
@@ -317,5 +318,76 @@ describe("GeminiProvider generateInsight (the experiment wording)", () => {
       ok: false,
       reason: "all_providers_failed",
     });
+  });
+});
+
+describe("GeminiProvider generateInsight (the weekly opening line)", () => {
+  const WEEKLY_SENTENCE = "One more small piece fell into the picture of what suits you.";
+  const weeklyContext = (facts: InsightContext["facts"] = {}): InsightContext => ({
+    locale: "en",
+    facts: { purpose: "weekly_line", approved_text: WEEKLY_SENTENCE, max_chars: 180, tone: "calm", ...facts },
+  });
+  const answer = { text: "One more small piece fell into the picture of what suits you, and that is nice." };
+
+  it("builds the weekly request: its system prompt, one delimited user turn and its schema, on the same endpoint and headers", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch).generateInsight(weeklyContext(), ctx());
+    const [call] = calls;
+    expect(call.url).toBe(`${GEMINI_ENDPOINT}/gemini-3.1-flash-lite:generateContent`);
+    expect(call.init.headers).toMatchObject({ "x-goog-api-key": KEY });
+    expect(JSON.stringify(call.body)).not.toContain(KEY);
+    const body = call.body as {
+      systemInstruction: { parts: { text: string }[] };
+      contents: { role: string; parts: Record<string, unknown>[] }[];
+      generationConfig: Record<string, unknown>;
+    };
+    expect(body.systemInstruction.parts[0].text).toBe(WEEKLY_LINE_SYSTEM_PROMPT_HE.replace("{max_chars}", "180"));
+    expect(body.systemInstruction.parts[0].text).not.toBe(WORDING_SYSTEM_PROMPT_HE.replace("{max_chars}", "180"));
+    expect(body.contents).toEqual([{ role: "user", parts: [{ text: `<approved_text>\n${WEEKLY_SENTENCE}\n</approved_text>` }] }]);
+    expect(body.generationConfig).toEqual({
+      maxOutputTokens: 2048,
+      responseMimeType: "application/json",
+      responseJsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text"],
+        properties: { text: { type: "string", maxLength: 180, description: expect.any(String) } },
+      },
+      thinkingConfig: { thinkingLevel: "LOW" },
+    });
+  });
+
+  it("any other facts shape still builds the experiment request", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch).generateInsight(wordingContext(), ctx());
+    const body = calls[0].body as { systemInstruction: { parts: { text: string }[] } };
+    expect(body.systemInstruction.parts[0].text).toBe(WORDING_SYSTEM_PROMPT_HE.replace("{max_chars}", "180"));
+  });
+
+  it("a weekly context outside its closed shape throws before any request is made (it never falls back to the experiment builder)", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse()));
+    const bad = weeklyContext({ notes: "I ate bread", scope: "next_meal" });
+    const error = await provider(doFetch).generateInsight(bad, ctx()).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).not.toContain("bread");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("the reply, the error mapping and the gateway path are the shared ones", async () => {
+    const good = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    const reply = await provider(good.fetch).generateInsight(weeklyContext(), ctx());
+    expect(reply.output).toEqual(answer);
+    expect(reply.model).toBe("gemini-3.1-flash-lite");
+
+    for (const [status, kind] of [[401, "auth"], [429, "rate_limited"], [503, "server"]] as const) {
+      const failing = fakeFetch(() => json({ error: { message: `echo: ${WEEKLY_SENTENCE}` } }, status));
+      const error = await provider(failing.fetch).generateInsight(weeklyContext(), ctx()).catch((e) => e);
+      expect(error).toBeInstanceOf(ProviderError);
+      expect(error.kind).toBe(kind);
+      expect(error.message).not.toContain("small piece");
+    }
+
+    const result = await new AIGateway([provider(good.fetch)]).wordWeeklyLine(weeklyContext(), { retries: 0 });
+    expect(result).toMatchObject({ ok: true, provider: "gemini", value: answer });
   });
 });

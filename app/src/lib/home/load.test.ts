@@ -20,6 +20,12 @@ vi.mock("@/domain/weight/types", async (importOriginal) => ({
   WEIGHT_FLOW: weightFlow,
 }));
 
+const weeklyFlow = vi.hoisted(() => ({ enabled: true, patternQuestionEnabled: true, starterExperimentsEnabled: false, aiLineEnabled: true, weightLineEnabled: true }));
+vi.mock("@/domain/weekly/types", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/domain/weekly/types")>()),
+  WEEKLY_FLOW: weeklyFlow,
+}));
+
 const USER = "00000000-0000-4000-8000-000000000001";
 const NOW = new Date("2027-01-09T16:00:00Z");
 
@@ -46,6 +52,7 @@ beforeEach(() => {
   flow.detectionEnabled = true;
   flow.earlySignalEnabled = true;
   weightFlow.milestoneMomentEnabled = true;
+  weeklyFlow.enabled = true;
   // The loader logs failures (code only); keep the test output quiet.
   errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -79,6 +86,7 @@ describe("loadHomeFacts: no profile to read", () => {
         earlySignal: null,
         quietHours: null,
         milestone: null,
+        weekly: null,
       });
       expect(queries).toEqual([]);
     },
@@ -140,10 +148,14 @@ describe("loadHomeFacts: ready", () => {
       earlySignal: null,
       quietHours: null,
       milestone: null,
+      weekly: null,
     });
   });
 
   it("never throws and answers every combination of failures consistently", async () => {
+    // 4096 renders of the two facts Home has always needed; the weekly fact is not under test here and its pure pre-check
+    // formats several local weeks per call, so it is switched off to keep this loop fast (it has its own describe below).
+    weeklyFlow.enabled = false;
     const kinds = { empty: EMPTY, row: ONE_ROW, error: FAILS, throw: THROWS } as const;
     const names = Object.keys(kinds) as Array<keyof typeof kinds>;
     const offlineKinds: Record<keyof typeof kinds, FakeTable> = {
@@ -649,5 +661,102 @@ describe("loadHomeFacts: the milestone fact", () => {
     expect(facts.lifecycle).toBe("FIRST_WEEK");
     expect(facts.firstWeek).not.toBeNull();
     expect(shape(queries)).toContain(SERIES);
+  });
+});
+
+describe("loadHomeFacts: the weekly fact", () => {
+  // Sunday 2027-01-10, 11:00 in Jerusalem: the card window of the week 2027-01-03..09 is open (Sunday 05:00 to Wednesday 05:00).
+  const SUNDAY = new Date("2027-01-10T09:00:00Z");
+  const WEEK_START = "2027-01-03";
+  const WEEK_START_UTC = "2027-01-02T22:00:00.000Z"; // local Sunday 00:00
+  const WEEK_END_UTC = "2027-01-09T22:00:00.000Z"; // the next local Sunday 00:00
+  const PERIODS_FROM = new Date(new Date(WEEK_START_UTC).getTime() - 28 * 86_400_000).toISOString();
+  const SINCE = new Date(SUNDAY.getTime() - 24 * 3_600_000).toISOString();
+
+  /** The transition was long before the week, so the window is the whole week and every day is available. */
+  const weeklyTables = (over: Record<string, FakeTable> = {}): Record<string, FakeTable> => ({
+    offline_periods: EMPTY,
+    ...allReportTables(EMPTY),
+    meal_entries: ONE_ROW,
+    profiles: { rows: [{ first_week_ended_at: "2026-12-20T10:00:00Z" }] },
+    weekly_summaries: EMPTY,
+    events: EMPTY,
+    ...over,
+  });
+  const weeklyQueries = (queries: Array<{ table: string; columns: string }>) =>
+    queries.filter((q) => ["profiles", "weekly_summaries", "events"].includes(q.table));
+
+  it("inside the card window an untouched week with a meal is the card", async () => {
+    const { client, queries } = createFakeReadSupabase(weeklyTables());
+    const facts = await loadHomeFacts(readyContext(client), SUNDAY);
+
+    expect(facts.weekly).toEqual({ weekStart: WEEK_START, card: true });
+    expect(weeklyQueries(queries).map((q) => q.table).sort()).toEqual(["events", "profiles", "weekly_summaries"]);
+    // The week's own offline read is the second periods query of the render, and the exact shape of 3.5.
+    const periods = queries.filter((q) => q.table === "offline_periods" && q.limit === 120);
+    expect(periods).toHaveLength(1);
+    expect(periods[0].filters).toEqual([
+      ["eq", "user_id", USER],
+      ["gt", "end_at", PERIODS_FROM],
+      ["lte", "start_at", WEEK_END_UTC],
+    ]);
+    const snooze = queries.find((q) => q.table === "events");
+    expect(snooze?.filters).toEqual([
+      ["eq", "user_id", USER],
+      ["eq", "name", "weekly_card_snoozed"],
+      ["gt", "occurred_at", SINCE],
+    ]);
+  });
+
+  it("a WEEKLY_CYCLE Home outside the card window still makes exactly the six existing queries", async () => {
+    // Saturday 2027-01-09 18:00 local: the previous week's card window closed on Wednesday 05:00.
+    const { client, queries } = createFakeReadSupabase(weeklyTables());
+    const facts = await loadHomeFacts(readyContext(client), NOW);
+    expect(facts.weekly).toBeNull();
+    expect(queries.map((q) => q.table).sort()).toEqual(["offline_periods", ...REPORT_TABLES].sort());
+  });
+
+  it.each(["FIRST_WEEK", "NEW", "ONBOARDING"])("%s: no weekly query at all, even on a Sunday morning", async (lifecycle) => {
+    const { client, queries } = createFakeReadSupabase({ ...weeklyTables(), patterns: EMPTY, user_preferences: EMPTY });
+    const facts = await loadHomeFacts(readyContext(client, "Asia/Jerusalem", lifecycle), SUNDAY);
+    expect(facts.weekly).toBeNull();
+    expect(queries.map((q) => q.table)).not.toContain("weekly_summaries");
+    expect(queries.filter((q) => q.table === "offline_periods" && q.limit === 120)).toEqual([]);
+  });
+
+  it("the switch off: no weekly query", async () => {
+    weeklyFlow.enabled = false;
+    const { client, queries } = createFakeReadSupabase(weeklyTables());
+    const facts = await loadHomeFacts(readyContext(client), SUNDAY);
+    expect(facts.weekly).toBeNull();
+    expect(queries.map((q) => q.table).sort()).toEqual(["offline_periods", ...REPORT_TABLES].sort());
+  });
+
+  it("an opened week is the quiet link only", async () => {
+    const { client } = createFakeReadSupabase(weeklyTables({ weekly_summaries: ONE_ROW }));
+    expect((await loadHomeFacts(readyContext(client), SUNDAY)).weekly).toEqual({ weekStart: WEEK_START, card: false });
+  });
+
+  it("a failing weekly read is null, leaves the other facts intact and does not make Home degraded", async () => {
+    for (const weekly_summaries of [FAILS, THROWS]) {
+      const { client } = createFakeReadSupabase(weeklyTables({ weekly_summaries, offline_periods: { rows: [SHABBAT_ROW] }, meal_entries: ONE_ROW }));
+      const facts = await loadHomeFacts(readyContext(client), SUNDAY);
+      expect(facts.weekly).toBeNull();
+      expect(facts.offlinePeriods).not.toBeNull();
+      expect(facts.hasAnyReport).toBe(true);
+    }
+  });
+
+  it("holds the invariant: a weekly fact implies the WEEKLY_CYCLE lifecycle", async () => {
+    for (const lifecycle of ["NEW", "ONBOARDING", "FIRST_WEEK", "WEEKLY_CYCLE"]) {
+      const { client } = createFakeReadSupabase({ ...weeklyTables(), patterns: EMPTY, user_preferences: EMPTY });
+      const facts = await loadHomeFacts(readyContext(client, "Asia/Jerusalem", lifecycle), SUNDAY);
+      if (facts.weekly !== null) expect(facts.lifecycle, lifecycle).toBe("WEEKLY_CYCLE");
+    }
+    for (const kind of ["not_configured", "signed_out", "unavailable", "profile_missing"] as const) {
+      const { client } = createFakeReadSupabase(weeklyTables());
+      const ctx = { kind, supabase: client, userId: USER } as unknown as OnboardingContext;
+      expect((await loadHomeFacts(ctx, SUNDAY)).weekly, kind).toBeNull();
+    }
   });
 });

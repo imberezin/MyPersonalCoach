@@ -1,13 +1,16 @@
 import type { ReactNode } from "react";
 import { acknowledgeMilestoneAction } from "@/app/(app)/progress/actions";
 import { snoozeFirstWeekCardAction, answerEarlySignalAction } from "@/app/(flow)/first-week/actions";
+import { openWeeklyStoryAction, snoozeWeeklyCardAction } from "@/app/(flow)/week/actions";
 import { SubmitButton } from "@/components/food/SubmitButton";
 import progressStyles from "@/components/progress/progress.module.css";
 import { OpenReportSheetButton } from "@/components/shell/OpenReportSheetButton";
 import { ButtonLink } from "@/components/ui/Button";
 import firstWeekStyles from "@/components/firstWeek/firstWeek.module.css";
+import weeklyStyles from "@/components/weekly/weekly.module.css";
 import { FIRST_WEEK_ROUTES, FIRST_WEEK_SNOOZE, type FirstWeekSnoozeCard } from "@/domain/firstWeekFlow";
 import type { HomeAction, HomeDecision } from "@/domain/home";
+import { WEEKLY_ROUTES } from "@/domain/weekly";
 import { WEIGHT_ROUTES } from "@/domain/weight";
 import { getLocale, getTranslations } from "@/i18n/server";
 import { HOME_TITLE_ID, HomeCard } from "./HomeCard";
@@ -89,6 +92,25 @@ function renderAction(action: HomeAction, copy: HomeCopy, pendingLabel: string):
         </div>
       );
     }
+    case "OPEN_WEEKLY_STORY": {
+      // "To my week" is a form post and not a link: the press creates the week's row and may call the AI (that is why Home
+      // exports maxDuration). Neither form has a hidden field: nothing the page says can be forged, the actions recompute the week.
+      if (!invitation) return null;
+      return (
+        <div className={firstWeekStyles.homeActions}>
+          <form action={openWeeklyStoryAction}>
+            <SubmitButton pendingLabel={pendingLabel}>{invitation.cta}</SubmitButton>
+          </form>
+          {invitation.snoozeLabel !== null ? (
+            <form action={snoozeWeeklyCardAction}>
+              <SubmitButton variant="secondary" pendingLabel={pendingLabel}>
+                {invitation.snoozeLabel}
+              </SubmitButton>
+            </form>
+          ) : null}
+        </div>
+      );
+    }
     case "ANSWER_EARLY_SIGNAL":
       return copy.earlySignal ? <EarlySignalAnswers answers={copy.earlySignal} pendingLabel={pendingLabel} /> : null;
     case "OPEN_PROGRESS": {
@@ -137,6 +159,14 @@ export async function HomeView({
   return (
     <>
       <HomeCard copy={copy} action={action} />
+      {/* The way back to "your week" once its card was opened or put away (the installed app has no address bar): one quiet text link under the clock card, never a second card, never beside the card itself. */}
+      {decision.weeklyLink ? (
+        <div className={weeklyStyles.homeLink}>
+          <ButtonLink href={WEEKLY_ROUTES.week} variant="tertiary">
+            {t("weeklyLink")}
+          </ButtonLink>
+        </div>
+      ) : null}
       <HomeRefresher renderedAt={renderedAt} />
     </>
   );

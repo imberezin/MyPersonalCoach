@@ -5,6 +5,7 @@ import type { EarlySignalDecision } from "../patterns/earlySignal";
 import type { PatternKind } from "../patterns/types";
 import type { QuietHours } from "../quietHours";
 import type { MilestoneMoment } from "../weight/milestoneProgress";
+import type { WeeklyHomeFact } from "../weekly/types";
 
 /**
  * Home: the one calm thing the first screen says right now. This file is the vocabulary (facts in,
@@ -51,6 +52,13 @@ export interface HomeFacts {
   quietHours: QuietHours | null;
   /** The landmark achievement Home may show now (derived from the weekly weight averages; carries no number). null = none, or unknown: an unknown read is never a celebration. */
   milestone: MilestoneMoment | null;
+  /**
+   * Weekly Learning, while the card window is open (Sunday 05:00 to Wednesday 05:00). `{ weekStart, card: true }` = show the card;
+   * `{ weekStart, card: false }` = it was already opened or snoozed, so Home shows only the quiet "Your week" link; null = nothing
+   * (outside the window, not due, a week with no report, or unknown). The loader applies the snooze and the opened state, so this
+   * is one fact. Non-null only when lifecycle === "WEEKLY_CYCLE"; the resolver ignores it otherwise.
+   */
+  weekly: WeeklyHomeFact | null;
 }
 
 export type HomeState =
@@ -68,6 +76,8 @@ export type HomeState =
   | { key: "EARLY_SIGNAL"; signal: PatternKind }
   /** A landmark on the way to the goal was confirmed by two completed weekly averages. `week` is the confirming week's date key; `isGoal` picks the wording. Ended by "Thanks" or after its window. Carries no number. */
   | { key: "MILESTONE_REACHED"; week: string; isGoal: boolean }
+  /** Weekly Learning: "your week" is ready (WEEKLY_CYCLE only). One calm card with "To my week" and "Not now". Carries no number. */
+  | { key: "WEEKLY_SUMMARY_READY" }
   | { key: "SILENCE"; reason: "NOTHING_TO_SAY" }
   | { key: "SILENCE"; reason: "OFFLINE_PERIOD"; periodType: OfflineType };
 export type HomeStateKey = HomeState["key"];
@@ -77,13 +87,20 @@ export type HomeAction =
   | { kind: "OPEN_REPORT_SHEET"; reason: "FIRST_REPORT" | "WELCOME_BACK" }
   | { kind: "OPEN_FIRST_WEEK_SUMMARY" }
   | { kind: "ANSWER_EARLY_SIGNAL" }
-  | { kind: "OPEN_PROGRESS"; week: string };
+  | { kind: "OPEN_PROGRESS"; week: string }
+  | { kind: "OPEN_WEEKLY_STORY" };
 
 export interface HomeDecision {
   state: HomeState;
   action: HomeAction | null;
   /** True when a fact was unknown. Home adds one calm sentence; it is never an error. */
   degraded: boolean;
+  /**
+   * True iff the weekly card was already opened or snoozed (`weekly.card === false`) in WEEKLY_CYCLE and the state is a calm clock
+   * state (MORNING, EVENING, SILENCE / NOTHING_TO_SAY): Home then shows one quiet "Your week" link to /week, under the clock card.
+   * A link, never a second card, never beside the card itself and never in a Shabbat or offline state. It is not an action.
+   */
+  weeklyLink: boolean;
 }
 
 /** Keys under `home.*` in the message catalogs; each has a `title` and a `body` (`firstWeekStart` also has a `lead` and a `cta`; the welcome-back and summary cards a `cta`). */
@@ -102,5 +119,6 @@ export const HOME_COPY_KEYS = [
   "earlySignalLateEvening",
   "milestoneReached",
   "milestoneGoalReached",
+  "weeklyReady",
 ] as const;
 export type HomeCopyKey = (typeof HOME_COPY_KEYS)[number];

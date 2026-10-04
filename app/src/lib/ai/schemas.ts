@@ -133,6 +133,12 @@ export const insightSchema = z.object({ text: z.string().max(600) });
  */
 export const experimentWordingSchema = z.object({ text: z.string().min(1).max(400) });
 
+/**
+ * The reworded weekly opening line (Weekly Learning). The same shape and bound as the experiment wording: 1 to 400
+ * characters only rejects hostile sizes; the real cap and every other rule live in `validateWording`.
+ */
+export const weeklyLineSchema = z.object({ text: z.string().min(1).max(400) });
+
 export const coachReplySchema = z.object({ text: z.string().max(1200) });
 
 export const patternCandidateSchema = z.object({
@@ -146,5 +152,6 @@ export type MealUnderstanding = UnderstoodMeal;
 export type Transcript = z.infer<typeof transcriptSchema>;
 export type Insight = z.infer<typeof insightSchema>;
 export type ExperimentWording = z.infer<typeof experimentWordingSchema>;
+export type WeeklyLine = z.infer<typeof weeklyLineSchema>;
 export type CoachReply = z.infer<typeof coachReplySchema>;
 export type PatternCandidate = z.infer<typeof patternCandidateSchema>;

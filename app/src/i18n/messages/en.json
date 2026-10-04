@@ -359,7 +359,14 @@
       "body": "This is a road you walked, week after week. You can look at it whenever it suits you, and then we keep seeing together what works for you."
     },
     "milestoneCta": "To my progress",
-    "milestoneAck": "Thanks"
+    "milestoneAck": "Thanks",
+    "weeklyReady": {
+      "title": "Your week",
+      "body": "I have a few words about last week. When it suits you, take a look.",
+      "cta": "To my week"
+    },
+    "weeklySnooze": "Not now",
+    "weeklyLink": "Your week"
   },
   "progress": {
     "title": "Progress",
@@ -639,6 +646,94 @@
       "activeTitle": "Your small experiment has started",
       "activeBody": "There is nothing you need to report. You can simply try it when it fits.",
       "back": "Back to the summary"
+    }
+  },
+  "weekly": {
+    "meta": {
+      "title": "Your week"
+    },
+    "title": "Your week",
+    "range": "{start} to {end}",
+    "line": {
+      "celebrateMilestone": "This week you passed a milestone on your way. It is a good moment to pause and feel it.",
+      "celebrateGoal": "This week you reached the place you set out for. It is a big moment, and you can simply enjoy it.",
+      "celebrateExperiment": "The small experiment helped, and now we know a little more about what suits you.",
+      "recover": "You came back, and that is exactly what matters. We continue from here.",
+      "learn": "One more small piece fell into the picture of what suits you.",
+      "quiet": "It was a quiet week, so I have less information. That is perfectly fine, and we can carry on from here with no rush."
+    },
+    "happened": {
+      "title": "What was meaningful",
+      "meals": "You reported meals this week.",
+      "weighed": "You weighed yourself this week.",
+      "returned": "You came back after a small break, and that is exactly what matters.",
+      "experimentStarted": "You started a small experiment.",
+      "experimentTried": "You tried something small."
+    },
+    "learned": {
+      "title": "What we learned",
+      "lateEveningHedged": "On a few evenings you reported a meal late in the evening. We will keep checking whether it repeats, with no rush to draw conclusions.",
+      "lateEveningRepeats": "It looks like this repeats for you: a meal late in the evening on several evenings. It is simply something we can get to know better.",
+      "patternQuestion": "Does that sound right to you?",
+      "confirm": "Sounds right",
+      "unsure": "Not sure",
+      "reject": "Not related to me",
+      "helped": "The small experiment helped, and we will remember that.",
+      "somewhat": "It helped a little. That is already good to know.",
+      "notReally": "It did not really fit this time, which is exactly what we wanted to find out. We will look for something else.",
+      "unknown": "It is not clear yet whether it helped, and that is perfectly fine.",
+      "notTried": "There was no chance to try, and that is completely fine. We can try again when it fits, or choose something else.",
+      "notYet": "Nothing clear repeats yet, and I do not want to guess. The picture sharpens over time."
+    },
+    "changed": {
+      "title": "What changed",
+      "first": "Your first weigh-in is saved. From here we can see a trend, without chasing a single day's number.",
+      "building": "There are already a few weekly weigh-ins. A little more, and we will start to see where the trend goes.",
+      "down": "Over the last weeks the weekly average has been going down. We look at the trend, not at a single day's number.",
+      "steady": "Over the last weeks the weekly average has been steady. Steadiness is part of the picture too.",
+      "up": "Over the last weeks the weekly average has been leaning up. We look at the trend, not at a single day's number."
+    },
+    "next": {
+      "title": "What next",
+      "none": "For now there is no small experiment to suggest, and that is fine. When there is one, I will suggest it, and you can choose not to.",
+      "light": "This week there is no need for anything new. We carry on at your pace.",
+      "afterResult": "Once we know how the experiment went, we will choose the next step.",
+      "offer": {
+        "pattern": "I noticed something that repeats for you, and there is one small thing we could try around it, if you like. Or not.",
+        "goalEating": "There is one small thing around eating that we could try this week, if you like. Or not.",
+        "goalFeeling": "There is one small thing we could try this week to feel good, if you like. Or not.",
+        "keepGoing": "We could stay with the same small experiment for one more week, to see whether it suits you. Or not.",
+        "nextStep": "The last one helped, and what helped stays yours. If you like, there is one more small thing we could try. Or not.",
+        "default": "There is one small thing we could try this week, if you like. Or not."
+      },
+      "choose": "Let's choose together",
+      "pendingLead": "The small experiment waiting for you:",
+      "frame": "You can try it at the next meal that suits you.",
+      "try": "I'll try",
+      "notThisTime": "Not this time",
+      "note": "This is not required, and you can say no.",
+      "activeLead": "Your small experiment:",
+      "activeBody": "There is nothing to report. You can simply try it when it fits, and next time we will ask how it went.",
+      "weighInvite": "When it suits you, one weigh-in a week is enough to see a trend."
+    },
+    "result": {
+      "title": "How was the small experiment?",
+      "reminder": "The experiment was:",
+      "lead": "There is no right answer. We are only curious whether it helped.",
+      "helpful": "It really helped",
+      "somewhat": "It helped a little",
+      "notReally": "Not really",
+      "unknown": "Not sure",
+      "notTried": "I did not get to try"
+    },
+    "back": "Back to Home",
+    "problem": {
+      "save": "I could not save just now. You can try again in a moment."
+    },
+    "unavailable": {
+      "title": "I could not load this just now",
+      "body": "That is fine. You can go back to Home and try again in a moment.",
+      "home": "Back to Home"
     }
   },
   "notFound": {

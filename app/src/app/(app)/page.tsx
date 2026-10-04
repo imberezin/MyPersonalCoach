@@ -5,6 +5,11 @@ import { HomeView } from "./_components/HomeView";
 import { SetupNotice } from "./_components/SetupNotice";
 import { openAppGate } from "./_lib/gate";
 
+// A ceiling, not a performance setting: the "your week" card on this page posts openWeeklyStoryAction, which may wait up to 13
+// seconds for the AI after a few database calls (a Server Action takes the timeout of the page that uses it). The render itself
+// is unaffected. The same value and the same reason as /first-week and /api/food/analyze; app/vercel.json has no function config.
+export const maxDuration = 40;
+
 export default async function HomePage() {
   const gate = await openAppGate();
   if (gate.kind === "not_configured") return <SetupNotice />;

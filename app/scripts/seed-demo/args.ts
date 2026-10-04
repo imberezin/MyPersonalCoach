@@ -5,14 +5,19 @@
  * variable, and nothing here ever echoes a value back (only flag names), so free text such as --motivation never reaches
  * a log line.
  */
+import { INTERVENTION_KEYS, type InterventionKey } from "@/domain/interventions/library";
 import { GOAL_FOCUS_KEYS, TEXT_LIMITS, type GoalFocusKey } from "@/domain/onboarding/model";
+import { feedbackFromAnswer, type PatternFeedback } from "@/domain/patterns";
 import { resolveTimeZone } from "@/domain/time";
 import { WEIGHT_ENTRY } from "@/domain/weight";
+import { resultFromAnswer, type ExperimentResult } from "@/domain/weekly/types";
 import { checkDemoEmail } from "./guard";
 
 export const SEED_SCENARIOS = [
   "day1-empty", "day3", "day4-candidate", "day5-early-finish", "absence", "shabbat-week", "max-days",
   "w-none", "w-one", "w-down", "w-milestone", "w-goal", "w-steady", "w-rising", "w-daily", "w-junk", "w-nogoal",
+  "w2-learn", "w2-celebrate", "w2-recover", "w2-quiet-none", "w2-quiet-card", "w2-too-short", "w2-first-weigh-in", "w2-shabbat-rows-missing",
+  "w3-result-due", "w4-history-rotation", "w4-down", "w4-goal",
 ] as const;
 export type SeedScenario = (typeof SEED_SCENARIOS)[number];
 
@@ -39,6 +44,25 @@ const MAX_SERIES = 120;
 
 export type SeedLifecycle = "first_week" | "weekly_cycle";
 export type SeedWeights = "none" | "weekly" | "daily";
+
+/** The library key of an `--exp` that names none: the one whose approved sentence the weekly tests use most. */
+export const DEFAULT_EXPERIMENT_KEY: InterventionKey = "eat_intentionally";
+
+/** One `--exp status@day[:result[:key]]` (Weekly Learning, 15.1). Start is 10:00 local on `day`; a DONE row ends 7 days later at 09:00. */
+export interface SeedExperiment {
+  status: "OFFERED" | "ACTIVE" | "SKIPPED" | "DONE";
+  /** 1-based calendar day, 2 up to the as-of day. */
+  day: number;
+  key: InterventionKey;
+  /** DONE only (the five answers of the result question); null for every other status. */
+  result: ExperimentResult | null;
+}
+
+/** `--pattern-answer confirm|unsure|reject@day`: the person's answer to the late-evening question, at 09:00 of `day`. */
+export interface SeedPatternAnswer {
+  answer: PatternFeedback;
+  day: number;
+}
 
 /**
  * What one run does. `seed` fills the demo user (the default); `explain` only prints the decisions; `clock` only touches
@@ -100,6 +124,17 @@ export interface SeedOptions {
   junkWeights: boolean;
   /** 1-based day of the junk entry (08:00). */
   junkDay: number;
+  /** profiles.observes_shabbat. Follows `shabbat` unless `--observes-shabbat` says otherwise (the profile keeps Shabbat while its rows are missing). */
+  observesShabbat: boolean;
+  /** `--transition-day`: first_week_ended_at = 10:00 local on this 1-based day (weekly cycle only). null = the Weight item's rule. */
+  transitionDay: number | null;
+  /** `--first-weigh-day`: the first weekly weigh-in falls on the first weigh day on or after this 1-based day. null = day 2. */
+  firstWeighDay: number | null;
+  /** `--exp`, in time order (at most one open row, and it is the last). */
+  experiments: readonly SeedExperiment[];
+  patternAnswer: SeedPatternAnswer | null;
+  /** `--weekly-opened`: the 1-based day of the Sunday that starts the week whose opened `weekly_summaries` row is written. */
+  weeklyOpened: number | null;
 }
 
 export type ParsedSeedArgs = { ok: true; value: SeedOptions } | { ok: false; error: string };
@@ -118,6 +153,14 @@ interface Shape {
   weights: SeedWeights;
   weightSeries: readonly number[] | null;
   junkWeights: boolean;
+  shabbat: boolean;
+  observesShabbat: boolean | null;
+  weighDay: number;
+  transitionDay: number | null;
+  firstWeighDay: number | null;
+  experiments: readonly SeedExperiment[];
+  patternAnswer: SeedPatternAnswer | null;
+  weeklyOpened: number | null;
 }
 
 const BASE: Shape = {
@@ -134,6 +177,14 @@ const BASE: Shape = {
   weights: "none",
   weightSeries: null,
   junkWeights: false,
+  shabbat: true,
+  observesShabbat: null,
+  weighDay: DEFAULT_WEIGH_DAY,
+  transitionDay: null,
+  firstWeighDay: null,
+  experiments: [],
+  patternAnswer: null,
+  weeklyOpened: null,
 };
 
 /**
@@ -146,6 +197,22 @@ function weightPreset(days: number, over: Partial<Shape> = {}): Partial<Shape> {
   return { days, mealsPerDay: 0, lateDays: [], gapDays: [], aggregatedSaturdayNight: false, lifecycle: "weekly_cycle", weights, ...over };
 }
 const W_DOWN = weightPreset(45, { weightSeries: [79.6, 78.9, 78.1, 77.4, 76.9, 76.2] });
+
+/**
+ * The weekly presets (Weekly Learning 15.2). All of them: the First Week ended on day 8 (Sunday 2026-09-20 at 10:00), three meals
+ * a day, no gap, no after-Shabbat report; the default goals and the Weight item's default 80 -> 72 kg. The clock is "as of day N"
+ * (09:00 of the Sunday N+1), when the previous week is ready. Saturdays are days 7, 14, 21, 28; weekly weigh-ins fall on Fridays.
+ */
+function weeklyPreset(days: number, over: Partial<Shape> = {}): Partial<Shape> {
+  const weights: SeedWeights = over.weightSeries ? "weekly" : "none";
+  return { days, mealsPerDay: 3, gapDays: [], aggregatedSaturdayNight: false, lifecycle: "weekly_cycle", transitionDay: 8, weights, ...over };
+}
+const exp = (status: SeedExperiment["status"], day: number, result: ExperimentResult | null = null, key: InterventionKey = DEFAULT_EXPERIMENT_KEY): SeedExperiment => ({
+  status,
+  day,
+  key,
+  result,
+});
 
 /** The documented defaults of each preset (16.5 and 15.3); explicit flags override them. */
 export const SEED_PRESETS: Readonly<Record<SeedScenario, Partial<Shape>>> = {
@@ -166,20 +233,39 @@ export const SEED_PRESETS: Readonly<Record<SeedScenario, Partial<Shape>>> = {
   "w-daily": weightPreset(31, { weights: "daily" }),
   "w-junk": { ...W_DOWN, junkWeights: true },
   "w-nogoal": { ...W_DOWN, goalWeightKg: null },
+  "w2-learn": weeklyPreset(14, { lateDays: [2, 3, 9, 10, 11, 12] }),
+  "w2-celebrate": weeklyPreset(21, { lateDays: [], goalWeightKg: 70, weightSeries: [75.9, 74.8, 74.6] }),
+  "w2-recover": weeklyPreset(14, { lateDays: [], gapDays: [9, 10, 11] }),
+  "w2-quiet-none": weeklyPreset(14, { lateDays: [], gapDays: [9, 10, 11, 12, 13] }),
+  "w2-quiet-card": weeklyPreset(14, { lateDays: [], gapDays: [9, 10, 12, 13] }),
+  "w2-too-short": weeklyPreset(14, { lateDays: [], transitionDay: 12 }),
+  "w2-first-weigh-in": weeklyPreset(14, { lateDays: [], firstWeighDay: 9, weighDay: 1, weightSeries: [79.8] }),
+  // The profile still observes Shabbat but its rows are missing (they run out): Saturday counts as an available day and RECOVER is off.
+  "w2-shabbat-rows-missing": weeklyPreset(14, { lateDays: [], gapDays: [9, 10, 11], shabbat: false, observesShabbat: true }),
+  "w3-result-due": weeklyPreset(21, { lateDays: [2, 3, 9, 10, 17], experiments: [exp("ACTIVE", 9)] }),
+  "w4-history-rotation": weeklyPreset(28, {
+    lateDays: [9, 10, 16, 17, 24],
+    weightSeries: [79.4, 79.8, 80.3, 80.9],
+    experiments: [exp("DONE", 9, "helpful", "eat_intentionally"), exp("DONE", 16, "not_tried", "slow_down")],
+  }),
+  "w4-down": weeklyPreset(28, { lateDays: [], weightSeries: [79.6, 78.9, 78.1, 77.4] }),
+  "w4-goal": weeklyPreset(28, { lateDays: [], weightSeries: [78.0, 75.5, 71.9, 71.6] }),
 };
 
 const KNOWN = new Set([
   "email", "scenario", "days", "meals-per-day", "late-days", "double-late-days", "gap-days", "shabbat", "aggregated-saturday-night",
   "total-meals", "mode", "start", "tz", "seed", "as-of", "clock-only", "clock-shift", "clock-off", "fresh", "reset", "drop-meals",
   "explain", "daily-cap", "goals", "motivation", "lifecycle", "start-weight", "goal-weight", "weights", "weight-series", "weigh-day",
-  "weigh-time", "weight-drift", "weight-noise", "junk-weights", "junk-day", "drop-weights",
+  "weigh-time", "weight-drift", "weight-noise", "junk-weights", "junk-day", "drop-weights", "transition-day", "first-weigh-day", "exp",
+  "pattern-answer", "weekly-opened", "observes-shabbat",
 ]);
 
 /** Flags that ask for data to be written. Without any of them, `--explain` alone only explains. */
 const DATA_FLAGS = [
   "scenario", "days", "meals-per-day", "late-days", "double-late-days", "gap-days", "shabbat", "aggregated-saturday-night",
   "total-meals", "mode", "start", "tz", "seed", "as-of", "goals", "motivation", "fresh", "lifecycle", "start-weight", "goal-weight",
-  "weights", "weight-series", "weigh-day", "weigh-time", "weight-drift", "weight-noise", "junk-weights", "junk-day",
+  "weights", "weight-series", "weigh-day", "weigh-time", "weight-drift", "weight-noise", "junk-weights", "junk-day", "transition-day",
+  "first-weigh-day", "exp", "pattern-answer", "weekly-opened", "observes-shabbat",
 ] as const;
 /** The subset that is about the meals and the profile themselves (not about the calendar): a `--clock-off` next to one is a seeding run. */
 const SEEDING_ONLY_FLAGS = DATA_FLAGS.filter((f) => !["days", "start", "tz", "as-of"].includes(f));
@@ -189,7 +275,8 @@ const AS_OF_DAY = /^day (\d{1,3})(?: ([01]\d|2[0-3]):([0-5]\d))?$/;
 const SHIFT = /^[+-]\d{1,4}[mhd]$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-type Raw = string | number | boolean | null | undefined;
+/** A flag given twice arrives as an array of strings (scripts/seed-demo.mjs); only `--exp` may be repeated. */
+type Raw = string | number | boolean | null | undefined | readonly string[];
 class ArgError extends Error {}
 const fail = (message: string): never => {
   throw new ArgError(message);
@@ -329,6 +416,88 @@ function weighTime(value: Raw): string {
 function timeZone(value: Raw): string {
   const v = text("tz", value).trim();
   return resolveTimeZone(v) === v ? v : fail("--tz must be an IANA time zone, like Asia/Jerusalem");
+}
+
+/** The clock of a run as a calendar position: whole days ended (N) and the minute of day N+1. null = an ISO instant (not checked against days). */
+interface AsOfPoint {
+  day: number;
+  minute: number;
+}
+
+function asOfPointOf(spec: string | null, days: number): AsOfPoint | null {
+  if (spec === null) return { day: days, minute: 540 };
+  const match = AS_OF_DAY.exec(spec);
+  if (!match) return null;
+  return { day: Number(match[1]), minute: match[2] === undefined ? 540 : Number(match[2]) * 60 + Number(match[3]) };
+}
+
+/** A 1-based calendar day from 2 (day 1 is the day onboarding finished) up to the as-of day. */
+function dayUpToClock(flag: string, value: Raw, point: AsOfPoint | null): number {
+  return wholeNumber(flag, value, 2, point === null ? 999 : point.day);
+}
+
+/** Whether the wall-clock `minute` of the 1-based calendar day `day` is not after the clock (the clock is on calendar day N+1). */
+function notAfterClock(day: number, minute: number, point: AsOfPoint | null): boolean {
+  if (point === null) return true;
+  return day < point.day + 1 || (day === point.day + 1 && minute <= point.minute);
+}
+
+const EXP_FORMAT = /^(offered|active|skipped|done)@(\d{1,3})(?::([a-z_]+))?(?::([a-z_]+))?$/;
+const EXP_STATUS = { offered: "OFFERED", active: "ACTIVE", skipped: "SKIPPED", done: "DONE" } as const;
+const EXP_FORMAT_HELP = "--exp must look like active@9, offered@20, skipped@12:eat_intentionally or done@16:not_tried:slow_down";
+const MINUTES_09 = 540;
+const EXPERIMENT_DAYS = 7;
+
+/**
+ * `--exp status@day[:result[:key]]`, repeatable. For `done` the first segment is the result (one of the five answers) and the
+ * second the key; for the other statuses the one optional segment is the key. Rows are sorted by day. At most one is open
+ * (OFFERED or ACTIVE) and it is the last; a row starts after the previous one ended (a DONE row runs 7 days).
+ */
+function experiments(value: Raw, point: AsOfPoint | null): SeedExperiment[] {
+  const parts = Array.isArray(value) ? value : [value];
+  const rows = parts.map((part): SeedExperiment => {
+    const match = typeof part === "string" ? EXP_FORMAT.exec(part.trim()) : null;
+    if (!match) return fail(EXP_FORMAT_HELP);
+    const status = EXP_STATUS[match[1] as keyof typeof EXP_STATUS];
+    const day = dayUpToClock("exp", match[2], point);
+    let result: ExperimentResult | null = null;
+    let keyText = match[3];
+    if (status === "DONE") {
+      if (match[3] === undefined) return fail("--exp done needs a result: helpful, somewhat, not_really, unknown or not_tried");
+      result = resultFromAnswer(match[3]);
+      if (result === null) return fail("--exp result must be helpful, somewhat, not_really, unknown or not_tried");
+      keyText = match[4];
+    } else if (match[4] !== undefined) {
+      return fail(EXP_FORMAT_HELP);
+    }
+    const key = keyText === undefined ? DEFAULT_EXPERIMENT_KEY : INTERVENTION_KEYS.find((k) => k === keyText);
+    if (key === undefined) return fail(`--exp key must be one of ${INTERVENTION_KEYS.join(", ")}`);
+    if (status === "DONE" && !notAfterClock(day + EXPERIMENT_DAYS, MINUTES_09, point)) return fail("--exp: a done experiment ends 7 days after its start, and that must not be after the clock");
+    return { status, day, key, result };
+  });
+  const sorted = [...rows].sort((a, b) => a.day - b.day);
+  sorted.forEach((row, i) => {
+    const next = sorted[i + 1];
+    if (next === undefined) return;
+    if (row.status === "OFFERED" || row.status === "ACTIVE") fail("--exp: at most one experiment is open, and it is the last one in time");
+    const free = row.status === "DONE" ? row.day + EXPERIMENT_DAYS : row.day + 1;
+    if (next.day < free) fail("--exp: an experiment starts after the one before it ended (a done one runs 7 days)");
+  });
+  return sorted;
+}
+
+/** `--pattern-answer confirm|unsure|reject@day`. */
+function patternAnswer(value: Raw, point: AsOfPoint | null): SeedPatternAnswer {
+  const match = typeof value === "string" ? /^(confirm|unsure|reject)@(\d{1,3})$/.exec(value.trim()) : null;
+  const answer = match ? feedbackFromAnswer(match[1]) : null;
+  if (!match || answer === null) return fail("--pattern-answer must look like confirm@9, unsure@9 or reject@9");
+  return { answer, day: dayUpToClock("pattern-answer", match[2], point) };
+}
+
+/** The weekday (0 = Sunday) of a 1-based calendar day, counted from the local date of day 1. */
+function weekdayOfDay(startDate: string, day: number): number {
+  const [y, m, d] = startDate.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + day - 1)).getUTCDay();
 }
 
 function parse(flags: Record<string, Raw>): SeedOptions {

@@ -156,6 +156,15 @@ describe("insertOfferedExperiment", () => {
     expect(queries[0].payload).not.toHaveProperty("started_at");
   });
 
+  it("a weekly starter offer has no pattern: patternId null is written as source_pattern_id null", async () => {
+    const { client, queries } = withTable({ insert: { rows: [{ id: EXP_ID }] } });
+    const result = await insertOfferedExperiment(client, { ...input, patternId: null });
+
+    expect(result).toEqual({ ok: true, value: { id: EXP_ID, created: true } });
+    expect(queries[0].payload).toMatchObject({ source_pattern_id: null, status: "OFFERED", wording_source: "library" });
+    expect(queries[0].payload).toHaveProperty("source_pattern_id", null);
+  });
+
   it("a unique violation is a double tap or another tab: the existing open row's id, created: false", async () => {
     const { client, queries } = withTable({
       insert: { error: { code: "23505" } },

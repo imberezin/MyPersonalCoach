@@ -11,8 +11,8 @@ export interface HomeCopy {
   /**
    * Non-null exactly when the decision carries an action other than answering the Early Signal or opening Progress for a
    * landmark. `lead` is the sentence above the button; First Week Start and the summary card say their piece in `copy.lead` and
-   * `copy.body` instead, so their own is null. `snoozeLabel` is the "Not now" of the two First Week cards that
-   * can be put away for a day (the summary and the welcome-back), and null for every other state.
+   * `copy.body` instead, so their own is null. `snoozeLabel` is the "Not now" of the three cards that
+   * can be put away for a day (the First Week summary and welcome-back, and "your week"), and null for every other state.
    */
   invitation: { lead: string | null; cta: string; snoozeLabel: string | null } | null;
   /**
@@ -47,6 +47,7 @@ const EMOJI: Record<HomeCopyKey, string | null> = {
   earlySignalLateEvening: "💡",
   milestoneReached: null,
   milestoneGoalReached: null,
+  weeklyReady: null,
 };
 
 // U+2066 (left-to-right isolate) and U+2069 (pop directional isolate): "16:10" stays one
@@ -68,8 +69,8 @@ function clockTime(instant: Date, locale: string, timeZone: string): string {
 
 /**
  * The button's words. First Week Start (B1) and the summary card have their own, and no extra sentence above the
- * button; the welcome-back card has its own sentence and button. The two cards that can be put away carry the label of
- * their "Not now". The Early Signal card has no invitation at all: its three buttons are its answers.
+ * button; the welcome-back card has its own sentence and button. The cards that can be put away (the two First Week cards and
+ * "your week") carry the label of their "Not now". The Early Signal card has no invitation at all: its three buttons are its answers.
  */
 function invitationFor(key: HomeCopyKey, t: Translator): HomeCopy["invitation"] {
   switch (key) {
@@ -80,6 +81,8 @@ function invitationFor(key: HomeCopyKey, t: Translator): HomeCopy["invitation"] 
       return { lead: null, cta: t(`${key}.cta`), snoozeLabel: t("firstWeekSnooze") };
     case "firstWeekWelcomeBack":
       return { lead: t("firstWeekWelcomeBack.lead"), cta: t("firstWeekWelcomeBack.cta"), snoozeLabel: t("firstWeekSnooze") };
+    case "weeklyReady":
+      return { lead: null, cta: t("weeklyReady.cta"), snoozeLabel: t("weeklySnooze") };
     case "earlySignalLateEvening":
     case "milestoneReached":
     case "milestoneGoalReached":

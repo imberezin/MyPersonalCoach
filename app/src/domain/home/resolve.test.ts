@@ -47,6 +47,7 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     earlySignal: null,
     quietHours: null,
     milestone: null,
+    weekly: null,
     ...overrides,
   };
 }
@@ -321,8 +322,9 @@ describe("resolveHome: the action", () => {
       earlySignal: null,
       quietHours: null,
       milestone: null,
+      weekly: null,
     });
-    expect(decision).toEqual({ state: { key: "MORNING" }, action: null, degraded: true });
+    expect(decision).toEqual({ state: { key: "MORNING" }, action: null, degraded: true, weeklyLink: false });
   });
 });
 
@@ -421,7 +423,7 @@ describe("resolveHome: bad input never throws", () => {
 
   it("gives a calm, degraded silence for an invalid instant instead of throwing", () => {
     const decision = resolveHome(facts("2027-01-12T05:00:00Z", { now: new Date("not a date"), hasAnyReport: false }));
-    expect(decision).toEqual({ state: { key: "SILENCE", reason: "NOTHING_TO_SAY" }, action: null, degraded: true });
+    expect(decision).toEqual({ state: { key: "SILENCE", reason: "NOTHING_TO_SAY" }, action: null, degraded: true, weeklyLink: false });
   });
 });
 
@@ -480,6 +482,7 @@ describe("homeCopyKey", () => {
     [{ key: "EARLY_SIGNAL", signal: "late_evening_meals" }, "earlySignalLateEvening"],
     [{ key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: false }, "milestoneReached"],
     [{ key: "MILESTONE_REACHED", week: "2026-10-25", isGoal: true }, "milestoneGoalReached"],
+    [{ key: "WEEKLY_SUMMARY_READY" }, "weeklyReady"],
     [{ key: "SILENCE", reason: "NOTHING_TO_SAY" }, "silence"],
     [{ key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" }, "offlineShabbat"],
     [{ key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" }, "offlineOther"],

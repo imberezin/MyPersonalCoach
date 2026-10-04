@@ -504,7 +504,10 @@ describe("experiments: the OFFERED state, started_at and the one-open rule", () 
 
   it("DONE also needs a start", async () => {
     const id = (await offered()).rows[0].id;
-    await expect(db.query("update public.experiments set status = 'DONE' where id = $1", [id])).rejects.toThrow("experiments_started_when_active");
+    // The answer is given (Weekly Learning's experiments_result_consistent), so only the missing start is wrong.
+    await expect(db.query("update public.experiments set status = 'DONE', tried = 'YES', helpfulness = 'UNKNOWN' where id = $1", [id])).rejects.toThrow(
+      "experiments_started_when_active",
+    );
   });
 
   it("wording, its source and its locale come together or not at all", async () => {

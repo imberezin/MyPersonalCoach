@@ -1,0 +1,91 @@
+/* "Your week" (/week) and the quiet "Your week" link on Home. Tokens only (tests/design/tokens.test.ts): text colors are
+   limited to the readable text tokens, and the brand colors are used for backgrounds and borders. Logical properties
+   throughout, so one stylesheet serves Hebrew (RTL) and English (LTR). Nothing here moves or fades, and NOTHING is colored by
+   what the weight did: every weight line, up or down, is the same plain text. */
+
+/* ---- The page: one card in the (flow) column ---- */
+
+.screen {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.stack p {
+  margin: 0;
+}
+
+/* The dates of the week: the only digits on the page. */
+.range {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+/* The opening line of the story. It may be the AI's wording, so it never widens the page. */
+.lead {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body-lg);
+  overflow-wrap: anywhere;
+}
+
+/* ---- The parts: a title and a few calm lines each ---- */
+
+.part {
+  display: grid;
+  gap: var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-border-light);
+}
+
+.part p {
+  margin: 0;
+}
+
+.partTitle {
+  margin: 0;
+  font-size: var(--font-size-h3);
+}
+
+/* The lines of "what was meaningful" and "what we learned": real lists, so a screen reader counts them. */
+.lines {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-block: 0;
+  padding-inline-start: var(--space-5);
+}
+
+/* The experiment sentence: plain text at the body size, no quotation marks and no decoration. It may be the AI's wording. */
+.experimentText {
+  font-size: var(--font-size-body);
+  overflow-wrap: anywhere;
+}
+
+/* ---- The decisions: equal buttons in a column ---- */
+
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: stretch;
+}
+
+.actions form {
+  display: grid;
+}
+
+.note {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+/* ---- Home: the quiet link that keeps the page reachable after the card was opened or put away ---- */
+
+.homeLink {
+  display: flex;
+  justify-content: center;
+  margin-block-start: var(--space-3);
+}

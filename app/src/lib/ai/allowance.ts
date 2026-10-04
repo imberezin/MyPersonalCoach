@@ -6,8 +6,8 @@ export type AiAllowance =
   | { allowed: true; usedToday: number }
   | { allowed: false; reason: "daily_cap" | "rate_limited" | "ledger_unavailable" };
 
-/** The ledger operations that count against the caps (the meal calls and the experiment wording: one free-tier budget). */
-const COUNTED_OPERATIONS = ["analyzeMeal", "analyzeText", "wordExperiment"];
+/** The ledger operations that count against the caps (the meal calls and the two wording operations: one free-tier budget). */
+const COUNTED_OPERATIONS = ["analyzeMeal", "analyzeText", "wordExperiment", "wordWeeklyLine"];
 
 const MINUTE_MS = 60_000;
 

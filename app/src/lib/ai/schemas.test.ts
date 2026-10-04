@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FOOD_LIMITS } from "@/domain/food";
-import { experimentWordingSchema, mealUnderstandingSchema, mealWireSchema } from "./schemas";
+import { experimentWordingSchema, mealUnderstandingSchema, mealWireSchema, weeklyLineSchema } from "./schemas";
 
 const wireItem = (over: Record<string, unknown> = {}) => ({
   name: "שניצל",
@@ -289,5 +289,21 @@ describe("experimentWordingSchema", () => {
     expect(experimentWordingSchema.safeParse(null).success).toBe(false);
     expect(experimentWordingSchema.safeParse({ text: "a".repeat(400) }).success).toBe(true);
     expect(experimentWordingSchema.safeParse({ text: "a".repeat(401) }).success).toBe(false);
+  });
+});
+
+describe("weeklyLineSchema", () => {
+  it("keeps only { text } and drops unknown keys", () => {
+    expect(weeklyLineSchema.parse({ text: "עוד חלק קטן נכנס לתמונה." })).toEqual({ text: "עוד חלק קטן נכנס לתמונה." });
+    expect(weeklyLineSchema.parse({ text: "x", extra: 1, weight: 80 })).toEqual({ text: "x" });
+  });
+
+  it("rejects a missing, empty, non-string or over-long (over 400) text", () => {
+    expect(weeklyLineSchema.safeParse({}).success).toBe(false);
+    expect(weeklyLineSchema.safeParse({ text: "" }).success).toBe(false);
+    expect(weeklyLineSchema.safeParse({ text: 5 }).success).toBe(false);
+    expect(weeklyLineSchema.safeParse(null).success).toBe(false);
+    expect(weeklyLineSchema.safeParse({ text: "a".repeat(400) }).success).toBe(true);
+    expect(weeklyLineSchema.safeParse({ text: "a".repeat(401) }).success).toBe(false);
   });
 });

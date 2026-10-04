@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AIGateway } from "../gateway";
 import { MEAL_JSON_SCHEMA } from "../prompts/mealSchema";
 import { MEAL_SYSTEM_PROMPT_HE } from "../prompts/meal";
+import { WEEKLY_LINE_JSON_SCHEMA, WEEKLY_LINE_SYSTEM_PROMPT_HE } from "../prompts/weeklyLine";
 import { WORDING_JSON_SCHEMA, WORDING_SYSTEM_PROMPT_HE } from "../prompts/wording";
 import { ProviderError, type InsightContext } from "../types";
 import { GROQ_ENDPOINT, GroqProvider } from "./groq";
@@ -311,5 +312,75 @@ describe("GroqProvider generateInsight (the experiment wording)", () => {
     const result = await gateway.wordExperiment(wordingContext(), { retries: 0 });
     expect(result).toMatchObject({ ok: true, provider: "groq", model: "qwen/qwen3.8-27b", value: answer });
     expect(records).toEqual(["wordExperiment:ok"]);
+  });
+});
+
+describe("GroqProvider generateInsight (the weekly opening line)", () => {
+  const WEEKLY_SENTENCE = "One more small piece fell into the picture of what suits you.";
+  const weeklyContext = (facts: InsightContext["facts"] = {}): InsightContext => ({
+    locale: "en",
+    facts: { purpose: "weekly_line", approved_text: WEEKLY_SENTENCE, max_chars: 180, tone: "calm", ...facts },
+  });
+  const answer = { text: "One more small piece fell into the picture of what suits you, and that is nice." };
+
+  it("JSON mode: the weekly system prompt and the shape in words, then a string user turn with the delimited sentence", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch).generateInsight(weeklyContext(), ctx());
+    const [call] = calls;
+    expect(call.url).toBe(GROQ_ENDPOINT);
+    expect(call.init.headers).toMatchObject({ Authorization: `Bearer ${KEY}` });
+    expect(JSON.stringify(call.body)).not.toContain(KEY);
+    const body = call.body;
+    expect(body.response_format).toEqual({ type: "json_object" });
+    const [system, user] = body.messages as Message[];
+    expect(system.content).toBe(`${WEEKLY_LINE_SYSTEM_PROMPT_HE.replace("{max_chars}", "180")}\n\nJSON shape: {"text":string}`);
+    expect(user).toEqual({ role: "user", content: `<approved_text>\n${WEEKLY_SENTENCE}\n</approved_text>` });
+  });
+
+  it("json_schema mode sends the strict weekly schema under its own name", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch, { responseFormat: "json_schema" }).generateInsight(weeklyContext(), ctx());
+    const body = calls[0].body;
+    expect(body.response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "weekly_line", strict: true, schema: JSON.parse(JSON.stringify(WEEKLY_LINE_JSON_SCHEMA)) },
+    });
+    expect((body.messages as Message[])[0].content).toBe(WEEKLY_LINE_SYSTEM_PROMPT_HE.replace("{max_chars}", "180"));
+  });
+
+  it("any other facts shape still builds the experiment request", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    await provider(doFetch, { responseFormat: "json_schema" }).generateInsight(wordingContext(), ctx());
+    const body = calls[0].body;
+    expect(body.response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "experiment_wording", strict: true, schema: JSON.parse(JSON.stringify(WORDING_JSON_SCHEMA)) },
+    });
+    expect((body.messages as Message[])[0].content).toBe(WORDING_SYSTEM_PROMPT_HE.replace("{max_chars}", "180"));
+  });
+
+  it("a weekly context outside its closed shape throws before any request is made", async () => {
+    const { fetch: doFetch, calls } = fakeFetch(() => json(okResponse()));
+    const error = await provider(doFetch).generateInsight(weeklyContext({ notes: "I ate bread", scope: "next_meal" }), ctx()).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).not.toContain("bread");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("the reply, the error mapping and the gateway path are the shared ones", async () => {
+    const good = fakeFetch(() => json(okResponse(JSON.stringify(answer))));
+    const reply = await provider(good.fetch).generateInsight(weeklyContext(), ctx());
+    expect(reply.output).toEqual(answer);
+
+    for (const [status, kind] of [[401, "auth"], [429, "rate_limited"], [503, "server"]] as const) {
+      const failing = fakeFetch(() => json({ error: { message: `echo: ${WEEKLY_SENTENCE}` } }, status));
+      const error = await provider(failing.fetch).generateInsight(weeklyContext(), ctx()).catch((e) => e);
+      expect(error).toBeInstanceOf(ProviderError);
+      expect(error.kind).toBe(kind);
+      expect(error.message).not.toContain("small piece");
+    }
+
+    const result = await new AIGateway([provider(good.fetch)]).wordWeeklyLine(weeklyContext(), { retries: 0 });
+    expect(result).toMatchObject({ ok: true, provider: "groq", value: answer });
   });
 });
