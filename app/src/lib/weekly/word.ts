@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AI_WORDING } from "@/domain/experiments/wording/constants";
 import { validateWording, type WordingCheck } from "@/domain/experiments/wording/validate";
 import type { OpeningLineKey, OpeningMode } from "@/domain/weekly/types";
+import { weeklyLineExtraOk } from "@/domain/weekly/wording/extra";
 import { decideWeeklyLineGate, type WeeklyLineGateReason } from "@/domain/weekly/wording/gate";
 import type { checkAiAllowance } from "@/lib/ai/allowance";
 import type { AiRuntime } from "@/lib/ai/factory";
@@ -15,7 +16,9 @@ export type WeeklyLineFallbackReason =
   | "no_providers"
   | "budget_exhausted"
   | "invalid_output"
-  | `rejected_${WordingCheck}`;
+  | `rejected_${WordingCheck}`
+  /** The weekly-only second check: a weight, body or praise word the approved sentence lacks, or too much changed. */
+  | "rejected_weekly_extra";
 
 export type WeeklyLineOutcome =
   | { source: "ai"; text: string; provider: string; model: string }
@@ -54,7 +57,7 @@ export interface WeeklyLineInput {
  * Order, as `produceExperimentWording`: a pre-check of the gate with a placeholder allowance and an infinite cap (so
  * only the switch, the provider configuration, the mode and the days can close it) -> the allowance read, only if that
  * passed -> the real gate with the real daily cap -> the gateway call (timeouts and budget from AI_WORDING) -> the
- * validator.
+ * validator -> the weekly-only extra check (forbidden words, tighter numbers).
  *
  * It logs codes only (area "ai", message "weekly_line_rejected" with the check, or "weekly_line_failed" with the
  * kind): never the candidate and never the approved sentence.
@@ -115,6 +118,12 @@ export async function produceWeeklyLineWording(deps: WeeklyLineDeps, input: Week
       await report(deps, "weekly_line_rejected", { check: verdict.check });
       return catalog(`rejected_${verdict.check}`);
     }
+    // The First Week validator has no list for a weight claim, praise or a verdict on the person: the weekly line adds one
+    // (and tighter numbers), so that the model can reword the sentence but never say anything new about the person.
+    if (!weeklyLineExtraOk({ candidate: verdict.text, approved: input.approvedText })) {
+      await report(deps, "weekly_line_rejected", { check: "weekly_extra" });
+      return catalog("rejected_weekly_extra");
+    }
     return { source: "ai", text: verdict.text, provider: result.provider, model: result.model };
   } catch {
     await report(deps, "weekly_line_failed", { kind: "provider_failed" });
@@ -137,7 +146,7 @@ async function readAllowance(deps: WeeklyLineDeps) {
 }
 
 /** A short code in `app_errors`. Never throws, and never carries text. */
-async function report(deps: WeeklyLineDeps, message: "weekly_line_rejected" | "weekly_line_failed", context: { check: WordingCheck } | { kind: string }): Promise<void> {
+async function report(deps: WeeklyLineDeps, message: "weekly_line_rejected" | "weekly_line_failed", context: { check: WordingCheck | "weekly_extra" } | { kind: string }): Promise<void> {
   try {
     await deps.logError({ userId: deps.userId, area: "ai", message, context });
   } catch {

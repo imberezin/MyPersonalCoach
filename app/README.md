@@ -30,10 +30,10 @@ Environment variables: `.env.example`.
 
 ```text
 src/
-├── app/            routes (thin): login, onboarding, (app) = home / progress (weight trend, landmarks) / coach / me (+ me/meals, me/weights), (flow) = report/food/*, report/weight (+ [id]/saved, [id]/edit), first-week (B6 summary, + experiment = B5), manifest, /api/engine/tick, /api/engine/shabbat-topup, /api/food/analyze
+├── app/            routes (thin): login, onboarding, (app) = home / progress (weight trend, landmarks) / coach / me (+ me/meals, me/weights), (flow) = report/food/*, report/weight (+ [id]/saved, [id]/edit), first-week (B6 summary, + experiment = B5), week ("your week": the weekly story and experiment loop), manifest, /api/engine/tick, /api/engine/shabbat-topup, /api/food/analyze
 ├── proxy.ts        refreshes the Supabase session and guards routes (Next 16 name for middleware)
-├── domain/         pure logic, no I/O: offline periods, First Week, milestones, patterns, intervention library, Home state (home/), food reporting and the meal list (food/), First Week progress, acknowledgement and summary (firstWeekFlow/), the late-evening detector, pattern level and Early Signal rules (patterns/), first-experiment selection and the AI wording gate and validator (experiments/), weight reporting (weight/: the entry rules, the weekly trend, landmarks and the Home moment, the chart geometry)
-├── components/     screen components by area: food/, meals/, firstWeek/, weight/ (entry form, My weights, the delete confirm), progress/ (the weekly line, landmarks, what was noticed), shell/, ui/
+├── domain/         pure logic, no I/O: offline periods, First Week, milestones, patterns, intervention library, Home state (home/), food reporting and the meal list (food/), First Week progress, acknowledgement and summary (firstWeekFlow/), the late-evening detector, pattern level and Early Signal rules (patterns/), first-experiment selection and the AI wording gate and validator (experiments/), weight reporting (weight/: the entry rules, the weekly trend, landmarks and the Home moment, the chart geometry), Weekly Learning (weekly/: the local week, the weekly moment, the story, the weekly weight line sliced from the Weight trend, the experiment decision and the stored opening line), the shared cooldown (engine/)
+├── components/     screen components by area: food/, meals/, firstWeek/, weekly/ (your week), weight/ (entry form, My weights, the delete confirm), progress/ (the weekly line, landmarks, what was noticed), shell/, ui/
 ├── lib/
 │   ├── supabase/   browser, server and admin clients, session refresh
 │   ├── ai/         AIGateway (fallback, timeout, schema validation) + provider adapters (Gemini, Groq), quota ledger
@@ -43,6 +43,7 @@ src/
 │   ├── experiments/  experiment rows (OFFERED, ACTIVE, SKIPPED) and the wording orchestrator (the only caller of the AI wording)
 │   ├── weight/     the ONLY writer of weight_entries (repo), and the Progress and Home-milestone reads (load)
 │   ├── progress/   what Progress says about the First Week (the adapter over the pattern and experiment loaders)
+│   ├── weekly/     Weekly Learning IO: the week's story read (never writes), the Home card fact, the experiment history, the opening row and the result writer, and the opening-line wording (the only caller of the weekly-line AI)
 │   ├── clock/      the one "now" (currentInstant): the real time, or a development clock file when the stack is local
 │   ├── http/       same-origin check for Route Handlers
 │   ├── analytics/  track() and the allowed event names (no content)

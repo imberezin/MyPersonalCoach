@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { USER_A, USER_B, as, createTestDb } from "./harness";
+import { OLD_DATABASE_TIMEOUT_MS, USER_A, USER_B, as, createTestDb } from "./harness";
 
 /**
  * Weight reporting on a real Postgres: the optional note, the content-free audit trail and delete_weight_entry.
@@ -143,7 +143,7 @@ describe("the note column", () => {
       // And the old row can be edited under the new rules.
       await old.query("update public.weight_entries set weight_kg = 117.2 where id = $1", [ID_1]);
     });
-  });
+  }, OLD_DATABASE_TIMEOUT_MS);
 });
 
 describe("row level security on weights", () => {
@@ -365,7 +365,7 @@ describe("the migration scrubs what the previous trigger already wrote", () => {
       expect(meal.old_data).toMatchObject({ meal_type: "lunch" });
       expect(meal.new_data).toMatchObject({ meal_type: "dinner" });
     });
-  });
+  }, OLD_DATABASE_TIMEOUT_MS);
 });
 
 describe("the order of the migrations", () => {

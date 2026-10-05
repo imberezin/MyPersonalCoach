@@ -93,10 +93,11 @@ export function buildWeightPlan(
     found.push(w);
   };
 
-  // Day 1 is the day onboarding finished: weigh-ins start on day 2.
+  // Day 1 is the day onboarding finished: weigh-ins start on day 2, or on `--first-weigh-day` (weekly mode only: it puts the very
+  // first weigh-in into the week a weekly preset summarises). Later weekly entries follow on the same weekday, every 7 days.
   if (options.weights === "weekly") {
     let ordinal = 0;
-    for (let day = 2; day <= options.days; day++) {
+    for (let day = options.firstWeighDay ?? 2; day <= options.days; day++) {
       if (weekdayOfDay(day) !== options.weighDay) continue;
       const fromSeries = options.weightSeries !== null ? options.weightSeries[ordinal] : undefined;
       // A series is the whole list: weigh-ins after its end do not exist. Without one the values are generated.

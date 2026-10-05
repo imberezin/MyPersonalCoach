@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { RESUME_WINDOW_MS } from "@/domain/food/routes";
-import { USER_A, USER_B, as, createTestDb } from "./harness";
+import { OLD_DATABASE_TIMEOUT_MS, USER_A, USER_B, as, createTestDb } from "./harness";
 
 /**
  * "My meals", delete a meal: delete_meal_entry and the content-free audit trail, on a real Postgres.
@@ -562,5 +562,5 @@ describe("the migration scrubs what the old trigger already wrote", () => {
       await old?.close();
       rmSync(before, { recursive: true, force: true });
     }
-  });
+  }, OLD_DATABASE_TIMEOUT_MS);
 });

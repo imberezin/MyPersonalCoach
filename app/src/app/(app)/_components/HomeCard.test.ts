@@ -18,6 +18,7 @@ const copy = (over: Partial<HomeCopy> = {}): HomeCopy => ({
   invitation: null,
   earlySignal: null,
   milestone: null,
+  experiment: null,
   degradedNote: null,
   ...over,
 });
@@ -104,6 +105,8 @@ describe("HomeCard", () => {
       { key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData: false },
       { key: "FIRST_WEEK_WELCOME_BACK" },
       { key: "EARLY_SIGNAL", signal: "late_evening_meals" },
+      { key: "WEEKLY_SUMMARY_READY" },
+      { key: "ACTIVE_EXPERIMENT", experiment: { key: "eat_intentionally", variantId: "default", wording: "A sentence.", locale: "en" } },
       { key: "SILENCE", reason: "NOTHING_TO_SAY" },
       { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" },
       { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" },
@@ -115,6 +118,7 @@ describe("HomeCard", () => {
           state,
           action: { kind: "OPEN_REPORT_SHEET", reason: "FIRST_REPORT" },
           degraded: true,
+          weeklyLink: false,
         };
         const html = render({ copy: homeCopyFor(decision, t, { locale, timeZone: "Asia/Jerusalem" }), action: null });
         expect(count(html, /<h1[\s>]/g), state.key).toBe(1);

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { FIRST_WEEK_FLOW, FIRST_WEEK_QUERY, FIRST_WEEK_ROUTES, FIRST_WEEK_SNOOZE, type FirstWeekSnoozeCard } from "@/domain/firstWeekFlow";
+import { FIRST_WEEK_FLOW, FIRST_WEEK_QUERY, FIRST_WEEK_ROUTES, FIRST_WEEK_SNOOZE, type HomeSnoozeCard } from "@/domain/firstWeekFlow";
+import { HOME_FEATURES } from "@/domain/home";
 import {
   PATTERN_FLOW,
   decideEarlySignal,
@@ -37,8 +38,8 @@ async function emit(context: ReadyContext, name: AnalyticsEventName, payload: Ev
   }
 }
 
-const isSnoozeCard = (value: unknown): value is FirstWeekSnoozeCard =>
-  FIRST_WEEK_SNOOZE.cards.some((card) => card === value);
+const isSnoozeCard = (value: unknown): value is HomeSnoozeCard =>
+  value === FIRST_WEEK_SNOOZE.experimentCard || FIRST_WEEK_SNOOZE.cards.some((card) => card === value);
 
 /**
  * "Let's continue" on the summary: the one irreversible step of the item (FIRST_WEEK to WEEKLY_CYCLE). It takes
@@ -96,6 +97,10 @@ export async function finishFirstWeekAction(): Promise<void> {
  * "Not now" on the summary or on a Home card: one append-only, content-free event, and the card stays away for 24
  * hours. The only field read is the card name, checked against the closed list; the rules are not re-evaluated
  * (hiding a card is harmless). A failed write simply leaves the card visible.
+ *
+ * The active-experiment card's "Thanks" rides the same event and field (card "experiment"): the same press, but in WEEKLY_CYCLE
+ * and only while HOME_FEATURES.activeExperimentCard is on (otherwise nothing is written). The reader hides that card for the rest
+ * of the local day (experimentCardSnoozed), so the event is still just `{ card }`.
  */
 export async function snoozeFirstWeekCardAction(formData: FormData): Promise<void> {
   const card = formData.get(FIRST_WEEK_SNOOZE.field);
@@ -104,7 +109,11 @@ export async function snoozeFirstWeekCardAction(formData: FormData): Promise<voi
   const opened = await openFirstWeekActionContext();
   if (opened.kind === "unavailable") redirect("/");
   const { context } = opened;
-  if (context.row.lifecycle_state !== "FIRST_WEEK") redirect("/");
+  if (card === FIRST_WEEK_SNOOZE.experimentCard) {
+    if (!HOME_FEATURES.activeExperimentCard || context.row.lifecycle_state !== "WEEKLY_CYCLE") redirect("/");
+  } else if (context.row.lifecycle_state !== "FIRST_WEEK") {
+    redirect("/");
+  }
 
   await emit(context, FIRST_WEEK_SNOOZE.event, { card }, currentInstant());
 

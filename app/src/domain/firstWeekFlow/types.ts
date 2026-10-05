@@ -45,8 +45,16 @@ export const FIRST_WEEK_SNOOZE = {
   /** The one form field of snoozeFirstWeekCardAction. */
   field: "card",
   cards: ["summary", "welcome_back"] as const,
+  /**
+   * The Home card of an ACTIVE experiment ("Thanks"). It rides the same event and the same form field, but it is not one of the
+   * First Week's `cards` (those hide for FIRST_WEEK_SNOOZE.hours in FIRST_WEEK): this one is pressed in WEEKLY_CYCLE and hides the
+   * card for the rest of the LOCAL day (experimentCardSnoozed).
+   */
+  experimentCard: "experiment",
 } as const;
 export type FirstWeekSnoozeCard = (typeof FIRST_WEEK_SNOOZE.cards)[number];
+/** Every value the snooze form field may carry: the First Week's cards and the active-experiment card. */
+export type HomeSnoozeCard = FirstWeekSnoozeCard | typeof FIRST_WEEK_SNOOZE.experimentCard;
 export interface FirstWeekSnoozed {
   summary: boolean;
   welcomeBack: boolean;

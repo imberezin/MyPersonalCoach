@@ -124,7 +124,7 @@ export interface SeedOptions {
   junkWeights: boolean;
   /** 1-based day of the junk entry (08:00). */
   junkDay: number;
-  /** profiles.observes_shabbat. Follows `shabbat` unless `--observes-shabbat` says otherwise (the profile keeps Shabbat while its rows are missing). */
+  /** profiles.observes_shabbat. Follows `shabbat` unless the preset says otherwise (w2-shabbat-rows-missing: the profile keeps Shabbat while its Shabbat rows are missing). */
   observesShabbat: boolean;
   /** `--transition-day`: first_week_ended_at = 10:00 local on this 1-based day (weekly cycle only). null = the Weight item's rule. */
   transitionDay: number | null;
@@ -257,7 +257,7 @@ const KNOWN = new Set([
   "total-meals", "mode", "start", "tz", "seed", "as-of", "clock-only", "clock-shift", "clock-off", "fresh", "reset", "drop-meals",
   "explain", "daily-cap", "goals", "motivation", "lifecycle", "start-weight", "goal-weight", "weights", "weight-series", "weigh-day",
   "weigh-time", "weight-drift", "weight-noise", "junk-weights", "junk-day", "drop-weights", "transition-day", "first-weigh-day", "exp",
-  "pattern-answer", "weekly-opened", "observes-shabbat",
+  "pattern-answer", "weekly-opened",
 ]);
 
 /** Flags that ask for data to be written. Without any of them, `--explain` alone only explains. */
@@ -265,7 +265,7 @@ const DATA_FLAGS = [
   "scenario", "days", "meals-per-day", "late-days", "double-late-days", "gap-days", "shabbat", "aggregated-saturday-night",
   "total-meals", "mode", "start", "tz", "seed", "as-of", "goals", "motivation", "fresh", "lifecycle", "start-weight", "goal-weight",
   "weights", "weight-series", "weigh-day", "weigh-time", "weight-drift", "weight-noise", "junk-weights", "junk-day", "transition-day",
-  "first-weigh-day", "exp", "pattern-answer", "weekly-opened", "observes-shabbat",
+  "first-weigh-day", "exp", "pattern-answer", "weekly-opened",
 ] as const;
 /** The subset that is about the meals and the profile themselves (not about the calendar): a `--clock-off` next to one is a seeding run. */
 const SEEDING_ONLY_FLAGS = DATA_FLAGS.filter((f) => !["days", "start", "tz", "as-of"].includes(f));
@@ -494,6 +494,17 @@ function patternAnswer(value: Raw, point: AsOfPoint | null): SeedPatternAnswer {
   return { answer, day: dayUpToClock("pattern-answer", match[2], point) };
 }
 
+/**
+ * `--weekly-opened day`: the 1-based day of the Sunday that STARTS the week whose opened row is written. The row is stamped on the
+ * Sunday after the week (09:00, when the week became ready), so that Sunday must not be after the clock.
+ */
+function weeklyOpened(value: Raw, point: AsOfPoint | null, startDate: string): number {
+  const day = wholeNumber("weekly-opened", value, 1, 999);
+  if (weekdayOfDay(startDate, day) !== 0) return fail("--weekly-opened must be the 1-based day of a Sunday: the day the week starts");
+  if (!notAfterClock(day + 7, MINUTES_09, point)) return fail("--weekly-opened: the week is opened on the Sunday after it, at 09:00, and that must not be after the clock");
+  return day;
+}
+
 /** The weekday (0 = Sunday) of a 1-based calendar day, counted from the local date of day 1. */
 function weekdayOfDay(startDate: string, day: number): number {
   const [y, m, d] = startDate.split("-").map(Number);
@@ -503,6 +514,7 @@ function weekdayOfDay(startDate: string, day: number): number {
 function parse(flags: Record<string, Raw>): SeedOptions {
   for (const key of Object.keys(flags)) {
     if (!KNOWN.has(key)) return fail(`Unknown flag --${key.slice(0, 40)}`);
+    if (Array.isArray(flags[key]) && key !== "exp") return fail(`--${key} may be given only once`);
   }
   const has = (flag: string) => flags[flag] !== undefined;
 
@@ -571,7 +583,9 @@ function parse(flags: Record<string, Raw>): SeedOptions {
     ? flags.lifecycle === "first_week" || flags.lifecycle === "weekly_cycle"
       ? flags.lifecycle
       : fail("--lifecycle must be first_week or weekly_cycle")
-    : shape.lifecycle;
+    : has("transition-day")
+      ? "weekly_cycle"
+      : shape.lifecycle;
   const startWeightKg = has("start-weight") ? kilograms("start-weight", flags["start-weight"], PROFILE_WEIGHT_RANGE.min, PROFILE_WEIGHT_RANGE.max) : shape.startWeightKg;
   const goalWeightKg = has("goal-weight") ? goalWeight(flags["goal-weight"]) : shape.goalWeightKg;
   const series = has("weight-series") ? weightSeries(flags["weight-series"]) : shape.weightSeries;
@@ -583,7 +597,19 @@ function parse(flags: Record<string, Raw>): SeedOptions {
         : fail("--weights must be none, weekly or daily");
   if (has("weight-series") && weightsFlag !== null && weightsFlag !== "weekly") return fail("--weight-series gives weekly weigh-ins (drop --weights, or use --weights weekly)");
   const weights: SeedWeights = weightsFlag ?? (has("weight-series") ? "weekly" : shape.weights);
-  const weighDay = has("weigh-day") ? wholeNumber("weigh-day", flags["weigh-day"], 0, 6) : DEFAULT_WEIGH_DAY;
+  const weighDay = has("weigh-day") ? wholeNumber("weigh-day", flags["weigh-day"], 0, 6) : shape.weighDay;
+
+  // The weekly flags are checked against the clock of the run: a day after it has not happened yet.
+  const startDate = has("start") ? realDate("start", flags.start) : DEFAULT_START_DATE;
+  const asOfSpec = has("as-of") ? asOf(flags["as-of"]) : null;
+  const point: AsOfPoint | null = mode === "relative" ? { day: days, minute: 1439 } : asOfPointOf(asOfSpec, days);
+  if (has("transition-day") && has("lifecycle") && lifecycle === "first_week") return fail("--transition-day belongs to --lifecycle weekly_cycle");
+  const transitionDay = has("transition-day") ? dayUpToClock("transition-day", flags["transition-day"], point) : shape.transitionDay;
+  const firstWeighDay = has("first-weigh-day") ? dayUpToClock("first-weigh-day", flags["first-weigh-day"], point) : shape.firstWeighDay;
+  const experimentRows = has("exp") ? experiments(flags.exp, point) : shape.experiments;
+  const answer = has("pattern-answer") ? patternAnswer(flags["pattern-answer"], point) : shape.patternAnswer;
+  const opened = has("weekly-opened") ? weeklyOpened(flags["weekly-opened"], point, startDate) : shape.weeklyOpened;
+  const shabbat = has("shabbat") ? bool("shabbat", flags.shabbat) : shape.shabbat;
 
   const explain = has("explain") ? switchFlag("explain", flags.explain) : false;
   const dataRequested = DATA_FLAGS.some((f) => has(f));
@@ -599,18 +625,18 @@ function parse(flags: Record<string, Raw>): SeedOptions {
     scenario,
     action,
     days,
-    startDate: has("start") ? realDate("start", flags.start) : DEFAULT_START_DATE,
+    startDate,
     mode,
     mealsPerDay,
     lateDays,
     doubleLateDays,
     gapDays,
-    shabbat: has("shabbat") ? bool("shabbat", flags.shabbat) : true,
+    shabbat,
     aggregatedSaturdayNight,
     totalMeals,
     seed: has("seed") ? wholeNumber("seed", flags.seed, 0, 2_147_483_647) : 1,
     timeZone: has("tz") ? timeZone(flags.tz) : DEFAULT_TIME_ZONE,
-    asOf: has("as-of") ? asOf(flags["as-of"]) : null,
+    asOf: asOfSpec,
     clockShift,
     clockOff: clockOffFlag,
     clockOnly,
@@ -633,6 +659,12 @@ function parse(flags: Record<string, Raw>): SeedOptions {
     weightNoise: has("weight-noise") ? decimal("weight-noise", flags["weight-noise"], 0, 5) : DEFAULT_WEIGHT_NOISE,
     junkWeights: has("junk-weights") ? onOff("junk-weights", flags["junk-weights"]) : shape.junkWeights,
     junkDay: has("junk-day") ? wholeNumber("junk-day", flags["junk-day"], 2, 60) : DEFAULT_JUNK_DAY,
+    observesShabbat: has("shabbat") ? shabbat : (shape.observesShabbat ?? shabbat),
+    transitionDay,
+    firstWeighDay,
+    experiments: experimentRows,
+    patternAnswer: answer,
+    weeklyOpened: opened,
   };
 }
 

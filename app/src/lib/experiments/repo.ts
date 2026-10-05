@@ -119,6 +119,33 @@ export async function loadExperiments(
 }
 
 /**
+ * The person's ACTIVE experiment with its stored sentence, or null when there is none, the row has no readable sentence or the
+ * read failed (the Home card treats unknown as "no card", so the two are not told apart). One bounded read: at most one row,
+ * because the database allows a single open experiment per person. Never throws.
+ */
+export async function loadActiveExperiment(supabase: SupabaseClient, userId: string): Promise<OpenExperiment | null> {
+  try {
+    const { data, error } = await supabase
+      .from("experiments")
+      .select(EXPERIMENT_COLUMNS)
+      .eq("user_id", userId)
+      .eq("status", "ACTIVE")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error) {
+      console.error("Experiments: loading the active one failed", error.code ?? "no_code");
+      return null;
+    }
+    if (!Array.isArray(data)) return null;
+    const open = parseRow(data[0])?.open ?? null;
+    return open !== null && open.status === "ACTIVE" ? open : null;
+  } catch {
+    console.error("Experiments: loading the active one threw");
+    return null;
+  }
+}
+
+/**
  * INSERTS one OFFERED row carrying the LIBRARY sentence, BEFORE any AI call (so a second press or tab finds it and an
  * interrupted request leaves approved text in place). `started_at` is not written: an offer never started. A unique
  * violation on `experiments_one_open` (23505) means an open experiment already exists (a double tap, a second tab, an

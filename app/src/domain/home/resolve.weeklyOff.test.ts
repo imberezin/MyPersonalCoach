@@ -22,6 +22,7 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     quietHours: null,
     milestone: null,
     weekly: { weekStart: "2027-01-03", card: true },
+    activeExperiment: null,
     ...overrides,
   };
 }

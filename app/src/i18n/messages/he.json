@@ -366,7 +366,12 @@
       "cta": "לשבוע שלי"
     },
     "weeklySnooze": "לא עכשיו",
-    "weeklyLink": "השבוע שלך"
+    "weeklyLink": "השבוע שלך",
+    "activeExperiment": {
+      "title": "הניסוי הקטן שלך",
+      "body": "אם בא לך, אפשר לנסות בארוחה הבאה. אין צורך לדווח על כלום."
+    },
+    "activeExperimentAck": "תודה"
   },
   "progress": {
     "title": "התקדמות",

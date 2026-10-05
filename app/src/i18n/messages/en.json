@@ -366,7 +366,12 @@
       "cta": "To my week"
     },
     "weeklySnooze": "Not now",
-    "weeklyLink": "Your week"
+    "weeklyLink": "Your week",
+    "activeExperiment": {
+      "title": "Your small experiment",
+      "body": "If you feel like it, you can try it at your next meal. There is nothing to report."
+    },
+    "activeExperimentAck": "Thanks"
   },
   "progress": {
     "title": "Progress",

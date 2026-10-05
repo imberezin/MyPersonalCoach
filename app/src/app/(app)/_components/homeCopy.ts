@@ -5,7 +5,7 @@ export interface HomeCopy {
   /** Decorative (Brand document section 23): the words carry the meaning. */
   emoji: string | null;
   title: string;
-  /** An opening line between the title and the body. Only First Week Start has one. */
+  /** An opening line between the title and the body. First Week Start has one, and the active-experiment card shows the person's own sentence here. */
   lead: string | null;
   body: string;
   /**
@@ -25,6 +25,11 @@ export interface HomeCopy {
    * landmark. Non-null exactly for that state, which has no invitation: the card carries its own action, and shows no number.
    */
   milestone: { cta: string; ackLabel: string } | null;
+  /**
+   * The one button of the active-experiment card, a soft "Thanks" that puts the card away for the day. Non-null exactly for that
+   * state, which has no invitation. It is not a report: there is no "tried" or "not tried" here (that answer is the weekly result question).
+   */
+  experiment: { ackLabel: string } | null;
   /** Non-null exactly when a fact was unknown. One calm sentence, never an error. */
   degradedNote: string | null;
 }
@@ -48,6 +53,7 @@ const EMOJI: Record<HomeCopyKey, string | null> = {
   milestoneReached: null,
   milestoneGoalReached: null,
   weeklyReady: null,
+  activeExperiment: null,
 };
 
 // U+2066 (left-to-right isolate) and U+2069 (pop directional isolate): "16:10" stays one
@@ -86,6 +92,7 @@ function invitationFor(key: HomeCopyKey, t: Translator): HomeCopy["invitation"] 
     case "earlySignalLateEvening":
     case "milestoneReached":
     case "milestoneGoalReached":
+    case "activeExperiment":
       return null;
     case "morning":
     case "evening":
@@ -109,7 +116,12 @@ function invitationFor(key: HomeCopyKey, t: Translator): HomeCopy["invitation"] 
 export function homeCopyFor(
   decision: HomeDecision,
   t: Translator,
-  format: { locale: string; timeZone: string },
+  format: {
+    locale: string;
+    timeZone: string;
+    /** The sentence of the ACTIVE_EXPERIMENT state, chosen by the page (experimentTextFor: the stored wording in this language, else the library's). Ignored by every other state. */
+    experimentText?: string;
+  },
 ): HomeCopy {
   const { state } = decision;
   const key = homeCopyKey(state);
@@ -119,7 +131,7 @@ export function homeCopyFor(
   return {
     emoji: EMOJI[key],
     title: t(`${key}.title`),
-    lead: key === "firstWeekStart" ? t("firstWeekStart.lead") : null,
+    lead: key === "firstWeekStart" ? t("firstWeekStart.lead") : state.key === "ACTIVE_EXPERIMENT" ? (format.experimentText ?? null) : null,
     body: t(`${key}.body`, values),
     // The Early Signal card answers with its three buttons and the landmark card has its own two, so neither brings an
     // invitation (invitationFor says null).
@@ -129,6 +141,7 @@ export function homeCopyFor(
         ? { confirm: t(`${key}.confirm`), unsure: t(`${key}.unsure`), reject: t(`${key}.reject`) }
         : null,
     milestone: state.key === "MILESTONE_REACHED" ? { cta: t("milestoneCta"), ackLabel: t("milestoneAck") } : null,
+    experiment: state.key === "ACTIVE_EXPERIMENT" ? { ackLabel: t("activeExperimentAck") } : null,
     degradedNote: decision.degraded ? t("degraded") : null,
   };
 }

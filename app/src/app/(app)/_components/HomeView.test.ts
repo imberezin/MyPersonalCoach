@@ -10,7 +10,9 @@ import progressStyles from "@/components/progress/progress.module.css";
 import { ReportSheetProvider } from "@/components/shell/ReportSheet";
 import { buildShellTestMessages } from "@/components/shell/shellTestMessages";
 import ui from "@/components/ui/ui.module.css";
-import type { HomeDecision } from "@/domain/home";
+import weeklyStyles from "@/components/weekly/weekly.module.css";
+import { NOT_SNOOZED } from "@/domain/firstWeekFlow";
+import { resolveHome, type HomeDecision, type HomeFacts } from "@/domain/home";
 import en from "@/i18n/messages/en.json";
 import he from "@/i18n/messages/he.json";
 import { HomeView } from "./HomeView";
@@ -39,6 +41,10 @@ vi.mock("@/app/(flow)/first-week/actions", () => ({
   answerEarlySignalAction: async () => {},
 }));
 vi.mock("@/app/(app)/progress/actions", () => ({ acknowledgeMilestoneAction: async () => {} }));
+vi.mock("@/app/(flow)/week/actions", () => ({
+  openWeeklyStoryAction: async () => {},
+  snoozeWeeklyCardAction: async () => {},
+}));
 vi.mock("./HomeRefresher", () => ({
   HomeRefresher: ({ renderedAt }: { renderedAt: number }) => createElement("i", { "data-refresher": renderedAt }),
 }));
@@ -65,7 +71,7 @@ async function render(decision: HomeDecision, timeZone = "Asia/Jerusalem", local
 /** The page without the Report sheet, whose own Close button is not part of Home. */
 const withoutSheet = (html: string) => html.replace(/<dialog\b[\s\S]*?<\/dialog>/, "");
 
-const MORNING: HomeDecision = { state: { key: "MORNING" }, action: null, degraded: false };
+const MORNING: HomeDecision = { state: { key: "MORNING" }, action: null, degraded: false, weeklyLink: false };
 
 describe("HomeView", () => {
   it("renders the one invitation button, tied to the Report sheet, when the decision has an action", async () => {
@@ -77,7 +83,7 @@ describe("HomeView", () => {
   });
 
   it("renders First Week Start with exactly one button that opens the Report sheet, and no counters", async () => {
-    const page = withoutSheet(await render({ state: { key: "FIRST_WEEK_START" }, action: ACTION, degraded: false }));
+    const page = withoutSheet(await render({ state: { key: "FIRST_WEEK_START" }, action: ACTION, degraded: false, weeklyLink: false }));
     expect(page).toContain("השבוע הראשון שלנו");
     expect(page).toContain("השבוע לא צריך להוכיח כלום.");
     expect(page).toContain("אני רוצה פשוט להכיר אותך");
@@ -108,6 +114,7 @@ describe("HomeView", () => {
       state: { key: "BEFORE_SHABBAT", candleLighting: CANDLE_LIGHTING },
       action: null,
       degraded: false,
+      weeklyLink: false,
     };
     const jerusalem = withoutSheet(await render(decision, "Asia/Jerusalem"));
     const utc = withoutSheet(await render(decision, "UTC"));
@@ -122,6 +129,7 @@ describe("HomeView", () => {
       state: { key: "FIRST_WEEK_SUMMARY_READY", hadEnoughData },
       action: { kind: "OPEN_FIRST_WEEK_SUMMARY" },
       degraded: false,
+      weeklyLink: false,
     });
 
     it.each(["he", "en"] as const)("%s: a link to /first-week as the primary control, then a Not now form, in the homeActions column", async (locale) => {
@@ -178,6 +186,7 @@ describe("HomeView", () => {
       state: { key: "FIRST_WEEK_WELCOME_BACK" },
       action: { kind: "OPEN_REPORT_SHEET", reason: "WELCOME_BACK" },
       degraded: false,
+      weeklyLink: false,
     };
 
     it.each(["he", "en"] as const)("%s: the Report sheet button with its own sentence above, and a Not now that names welcome_back", async (locale) => {
@@ -215,6 +224,7 @@ describe("HomeView", () => {
       state: { key: "EARLY_SIGNAL", signal: "late_evening_meals" },
       action: { kind: "ANSWER_EARLY_SIGNAL" },
       degraded: false,
+      weeklyLink: false,
     };
 
     it.each(["he", "en"] as const)("%s: three equal answers, in the spec's order, each its own form with a hidden answer", async (locale) => {
@@ -277,6 +287,7 @@ describe("HomeView", () => {
       state: { key: "MILESTONE_REACHED", week: "2026-10-18", isGoal },
       action: { kind: "OPEN_PROGRESS", week: "2026-10-18" },
       degraded: false,
+      weeklyLink: false,
     });
 
     it.each(["he", "en"] as const)("%s: a link to /progress as the primary control, then a Thanks form with the week, in one column", async (locale) => {
@@ -335,6 +346,136 @@ describe("HomeView", () => {
       const page = withoutSheet(await render({ ...MILESTONE(false), action: null }));
       expect(page).not.toContain("<form");
       expect(page).not.toContain("<a ");
+    });
+  });
+
+  describe("the weekly card", () => {
+    const WEEKLY: HomeDecision = {
+      state: { key: "WEEKLY_SUMMARY_READY" },
+      action: { kind: "OPEN_WEEKLY_STORY" },
+      degraded: false,
+      weeklyLink: false,
+    };
+
+    it.each(["he", "en"] as const)("%s: a primary form button to my week, then a secondary Not now form, in the homeActions column", async (locale) => {
+      const words = (locale === "he" ? he : en).home;
+      const page = withoutSheet(await render(WEEKLY, "Asia/Jerusalem", locale));
+
+      expect(page).toContain(words.weeklyReady.title);
+      expect(page).toContain(words.weeklyReady.body);
+
+      // Both are real form posts: neither is a link, and NEITHER has a hidden field (nothing the page says can be forged).
+      expect(page.match(/<form\b/g)).toHaveLength(2);
+      expect(page.match(/<button\b/g)).toHaveLength(2);
+      expect(page).not.toContain("<a ");
+      expect(page).not.toContain('type="hidden"');
+
+      const buttons = Array.from(page.matchAll(/<button\b([^>]*)>([^<]*)<\/button>/g), (match) => ({ tag: match[1], label: match[2] }));
+      expect(buttons.map((b) => b.label)).toEqual([words.weeklyReady.cta, words.weeklySnooze]);
+      expect(buttons[0].tag).toContain(ui.primary);
+      expect(buttons[1].tag).toContain(ui.secondary);
+      for (const b of buttons) expect(b.tag).toContain('type="submit"');
+
+      expect(page).toContain(`<div class="${firstWeekStyles.homeActions}">`);
+      expect(page).not.toContain('aria-haspopup="dialog"');
+    });
+
+    it("has no emoji, no digit, no exclamation mark, exactly one h1 and no quiet link beside it", async () => {
+      for (const locale of ["he", "en"] as const) {
+        const page = withoutSheet(await render(WEEKLY, "UTC", locale));
+        expect(page.match(/<h1[\s>]/g), locale).toHaveLength(1);
+        expect(page, locale).not.toContain('aria-hidden="true"');
+        expect(page, locale).not.toContain(weeklyStyles.homeLink);
+        const visible = page.replace(/<script[^]*?<\/script>/g, " ").replace(/<[^>]*>/g, " ");
+        expect(visible, locale).not.toMatch(/\d|!|%|score|ציון|אחוז/i);
+      }
+    });
+
+    it("renders nothing for the buttons when the decision has no action", async () => {
+      const page = withoutSheet(await render({ ...WEEKLY, action: null }));
+      expect(page).not.toContain("<form");
+      expect(page).not.toContain("<button");
+    });
+  });
+
+  describe("the quiet way back to the week", () => {
+    const CLOCK_STATES: Array<[string, HomeDecision["state"]]> = [
+      ["morning", { key: "MORNING" }],
+      ["evening", { key: "EVENING" }],
+      ["nothing to say", { key: "SILENCE", reason: "NOTHING_TO_SAY" }],
+    ];
+
+    it.each(CLOCK_STATES)("%s: one plain link to /week under the card, with no form, no hidden field, no emoji and no digit", async (_name, state) => {
+      for (const locale of ["he", "en"] as const) {
+        const words = (locale === "he" ? he : en).home;
+        const page = withoutSheet(await render({ state, action: null, degraded: false, weeklyLink: true }, "Asia/Jerusalem", locale));
+
+        const links = Array.from(page.matchAll(/<a\b[^>]*href="\/week"[^>]*>([^<]*)<\/a>/g));
+        expect(links, locale).toHaveLength(1);
+        expect(links[0][1], locale).toBe(words.weeklyLink);
+        expect(links[0][0], locale).toContain(ui.tertiary);
+        expect(page.match(/<a\b/g), locale).toHaveLength(1);
+
+        expect(page, locale).not.toContain("<form");
+        expect(page, locale).not.toContain("<button");
+        expect(page, locale).not.toContain('type="hidden"');
+        expect(page, locale).not.toContain('aria-hidden="true"');
+
+        // Under the card, in a wrapper of its own, never inside it.
+        expect(page, locale).toContain(`<div class="${weeklyStyles.homeLink}">`);
+        expect(page.indexOf(weeklyStyles.homeLink), locale).toBeGreaterThan(page.indexOf("</section>"));
+        // The static markup writes an apostrophe as an entity, which holds digits; the catalog has the plain one.
+        const visible = page.replace(/<script[^]*?<\/script>/g, " ").replace(/<[^>]*>/g, " ").replace(/&#x27;/g, "'");
+        expect(visible, locale).not.toMatch(/\d/);
+      }
+    });
+
+    it("renders no link when the decision does not carry it", async () => {
+      for (const [, state] of CLOCK_STATES) {
+        const page = withoutSheet(await render({ state, action: null, degraded: false, weeklyLink: false }));
+        expect(page).not.toContain('href="/week"');
+        expect(page).not.toContain(weeklyStyles.homeLink);
+      }
+    });
+
+    it("never shows the card and the link together", async () => {
+      const both: HomeDecision = { state: { key: "WEEKLY_SUMMARY_READY" }, action: { kind: "OPEN_WEEKLY_STORY" }, degraded: false, weeklyLink: false };
+      expect(withoutSheet(await render(both))).not.toContain('href="/week"');
+    });
+
+    // The way back stays reachable: for every fact that says "the card was opened or put away" in a clock state, the REAL
+    // resolver and the REAL view put the link on screen, so an unfinished choice (the offer, "I'll try", the result question,
+    // the pattern question) is never stranded on an installed app that has no address bar.
+    const FACTS = (now: string): HomeFacts => ({
+      now: new Date(now),
+      timeZone: "Asia/Jerusalem",
+      offlinePeriods: [],
+      hasAnyReport: true,
+      lifecycle: "WEEKLY_CYCLE",
+      firstWeek: null,
+      firstWeekSnoozed: NOT_SNOOZED,
+      earlySignal: null,
+      quietHours: null,
+      milestone: null,
+      weekly: { weekStart: "2027-01-03", card: false },
+      activeExperiment: null,
+    });
+
+    it.each([
+      ["the morning", "2027-01-10T05:00:00Z"],
+      ["the evening", "2027-01-10T18:00:00Z"],
+      ["the quiet middle of the day", "2027-01-10T11:00:00Z"],
+    ])("an opened or put-away card still shows the link in %s", async (_name, now) => {
+      const page = withoutSheet(await render(resolveHome(FACTS(now))));
+      expect(page.match(/<a\b[^>]*href="\/week"/g)).toHaveLength(1);
+      expect(page).not.toContain("<form");
+    });
+
+    it("shows no link while the card is untouched (the card itself is the way in) and none when nothing is known", async () => {
+      const untouched = resolveHome({ ...FACTS("2027-01-10T05:00:00Z"), weekly: { weekStart: "2027-01-03", card: true } });
+      expect(withoutSheet(await render(untouched))).not.toContain('href="/week"');
+      const unknown = resolveHome({ ...FACTS("2027-01-10T05:00:00Z"), weekly: null });
+      expect(withoutSheet(await render(unknown))).not.toContain('href="/week"');
     });
   });
 

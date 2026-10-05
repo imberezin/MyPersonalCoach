@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { parseSeedArgs, type SeedOptions } from "../../scripts/seed-demo/args";
 import { formatExplain, type ExplainFacts } from "../../scripts/seed-demo/explain";
-import { runSeed, type DbSession, type MealRow, type SeedDeps, type SignInResult, type StackStatus, type WeightEntryRow } from "../../scripts/seed-demo/run";
+import {
+  runSeed,
+  type DbSession,
+  type ExperimentRow,
+  type MealRow,
+  type SeedDeps,
+  type SignInResult,
+  type StackStatus,
+  type WeeklySummaryRow,
+  type WeightEntryRow,
+} from "../../scripts/seed-demo/run";
+import type { PlannedPatternAnswer } from "../../scripts/seed-demo/weekly";
 import type { ShabbatPeriodRow } from "@/domain/onboarding/shabbatRows";
 
 /**
@@ -45,10 +56,11 @@ const CLEAN_FACTS = (over: Partial<ExplainFacts> = {}): ExplainFacts => ({
   storedEvidence: null,
   earlySignal: { due: true, level: "EARLY_SIGNAL" },
   quietHours: { kind: "WINDOW", startMinute: 0, endMinute: 480 },
-  home: { state: { key: "EARLY_SIGNAL", signal: "late_evening_meals" }, action: { kind: "ANSWER_EARLY_SIGNAL" }, degraded: false },
+  home: { state: { key: "EARLY_SIGNAL", signal: "late_evening_meals" }, action: { kind: "ANSWER_EARLY_SIGNAL" }, degraded: false, weeklyLink: false },
   selection: { kind: "NONE", reason: "pattern_not_established" },
   dailyCap: 40,
   weight: null,
+  weekly: { kind: "NOT_WEEKLY_CYCLE" },
   ...over,
 });
 
@@ -60,6 +72,9 @@ interface Rig {
   shabbat: ShabbatPeriodRow[];
   meals: MealRow[];
   weights: WeightEntryRow[];
+  experiments: ExperimentRow[];
+  answers: PlannedPatternAnswer[];
+  weekly: WeeklySummaryRow[];
   clock: { instant: Date | null };
   text(): string;
 }
@@ -71,6 +86,9 @@ function rig(over: { stack?: StackStatus | null; password?: string | undefined; 
   const shabbat: ShabbatPeriodRow[] = [];
   const meals: MealRow[] = [];
   const weights: WeightEntryRow[] = [];
+  const experiments: ExperimentRow[] = [];
+  const answers: PlannedPatternAnswer[] = [];
+  const weekly: WeeklySummaryRow[] = [];
   const clock = { instant: over.existingClock ?? (null as Date | null) };
 
   const session: DbSession = {
@@ -104,6 +122,21 @@ function rig(over: { stack?: StackStatus | null; password?: string | undefined; 
     async dropWeights(count) {
       calls.push(`dropWeights:${count}`);
       return typeof count === "number" ? count : 5;
+    },
+    async upsertExperiments(rows) {
+      calls.push("upsertExperiments");
+      experiments.push(...rows);
+      return rows.length;
+    },
+    async writePatternAnswer(answer) {
+      calls.push("writePatternAnswer");
+      answers.push(answer);
+      return true;
+    },
+    async upsertWeeklySummary(row) {
+      calls.push("upsertWeeklySummary");
+      weekly.push(row);
+      return 1;
     },
     async explain() {
       calls.push("explain");
@@ -148,7 +181,7 @@ function rig(over: { stack?: StackStatus | null; password?: string | undefined; 
       },
     },
   };
-  return { deps, lines, calls, profile, shabbat, meals, weights, clock, text: () => lines.join("\n") };
+  return { deps, lines, calls, profile, shabbat, meals, weights, experiments, answers, weekly, clock, text: () => lines.join("\n") };
 }
 
 function expectNoLeak(r: Rig) {
@@ -331,6 +364,16 @@ describe("a run with weigh-ins", () => {
     expect(real.text()).not.toContain("someone@example.com");
   });
 
+  it("the guard holds for the Weekly Learning rows: a hosted stack and a real e-mail change nothing", async () => {
+    const hosted = rig({ stack: { apiUrl: "https://abcdefghijklmnopqrst.supabase.co", publishableKey: PUBLISHABLE_KEY } });
+    expect(await runSeed(opts({ scenario: "w3-result-due", "pattern-answer": "unsure@10", "weekly-opened": "8" }), hosted.deps)).toEqual({ ok: false, code: "not_local_stack" });
+    expect(hosted.calls).toEqual([]);
+    const real = rig();
+    expect(await runSeed({ ...opts({ scenario: "w3-result-due" }), email: "someone@example.com" }, real.deps)).toEqual({ ok: false, code: "bad_email_suffix" });
+    expect(real.calls).toEqual([]);
+    expect(real.experiments).toEqual([]);
+  });
+
   it("--explain after a weight run is asked at the clock the run wrote", async () => {
     let explainedAt: Date | null = null;
     const r = rig({
@@ -358,9 +401,103 @@ function stubSession(r: Rig): DbSession {
     dropMeals: async () => 0,
     upsertWeights: async (rows) => (r.calls.push("upsertWeights"), rows.length),
     dropWeights: async () => 0,
+    upsertExperiments: async (rows) => (r.calls.push("upsertExperiments"), rows.length),
+    writePatternAnswer: async () => (r.calls.push("writePatternAnswer"), true),
+    upsertWeeklySummary: async () => (r.calls.push("upsertWeeklySummary"), 1),
     explain: async () => CLEAN_FACTS(),
   };
 }
+
+describe("a Weekly Learning run", () => {
+  it("a weekly preset without extra rows seeds the profile, the Shabbat rows and the meals, and touches no weekly table", async () => {
+    const r = rig();
+    expect(await runSeed(opts({ scenario: "w2-learn" }), r.deps)).toEqual({ ok: true });
+    expect(r.calls).toEqual(["signIn", "writeProfile", "upsertShabbat", "listPeriods", "upsertMeals", "clockWrite"]);
+    expect(r.profile[0]).toMatchObject({ lifecycle_state: "WEEKLY_CYCLE", observes_shabbat: true, first_week_ended_at: "2026-09-20T07:00:00.000Z" }); // Sun 10:00 Asia/Jerusalem
+    expect(r.clock.instant?.toISOString()).toBe("2026-09-27T06:00:00.000Z"); // Sun 09:00 of day 15
+    expect(r.text()).toContain("Lifecycle: WEEKLY_CYCLE; the First Week ended 2026-09-20T10:00:00+03:00.");
+    expect(r.text()).not.toContain("Experiments:");
+    expect(r.text()).not.toContain("Pattern answer:");
+    expect(r.text()).not.toContain("Weekly summary:");
+    expectNoLeak(r);
+  });
+
+  it("an experiment preset writes the experiments after the meals and says how many, with no uuid", async () => {
+    const r = rig();
+    expect(await runSeed(opts({ scenario: "w3-result-due" }), r.deps)).toEqual({ ok: true });
+    expect(r.calls).toEqual(["signIn", "writeProfile", "upsertShabbat", "listPeriods", "upsertMeals", "upsertExperiments", "clockWrite"]);
+    expect(r.experiments).toHaveLength(1);
+    expect(r.experiments[0]).toMatchObject({ status: "ACTIVE", intervention_key: "eat_intentionally", variant: "default", wording_source: "library", wording_locale: "he", ended_at: null });
+    expect(r.text()).toContain("Experiments: 1 planned (1 new): active.");
+    expectNoLeak(r);
+
+    const history = rig();
+    await runSeed(opts({ scenario: "w4-history-rotation" }), history.deps);
+    expect(history.calls).toEqual(["signIn", "writeProfile", "upsertShabbat", "listPeriods", "upsertMeals", "upsertWeights", "upsertExperiments", "clockWrite"]);
+    expect(history.text()).toContain("Experiments: 2 planned (2 new): done, done.");
+    expect(history.text()).toContain("Weights: 4 planned (4 new), start 80 kg, goal 72 kg.");
+    expectNoLeak(history);
+  });
+
+  it("the pattern answer is written after the meals and the experiments, and a refusal is said plainly", async () => {
+    const r = rig();
+    await runSeed(opts({ scenario: "w2-learn", "pattern-answer": "reject@10" }), r.deps);
+    expect(r.calls).toEqual(["signIn", "writeProfile", "upsertShabbat", "listPeriods", "upsertMeals", "writePatternAnswer", "clockWrite"]);
+    expect(r.answers).toHaveLength(1);
+    expect(r.answers[0]).toMatchObject({ answer: "reject", syncStatus: "OBSERVATION", occurrences: [] });
+    expect(r.text()).toContain("Pattern answer: reject recorded at 2026-09-22T09:00:00+03:00, 0 evidence rows.");
+    expectNoLeak(r);
+
+    const refused = rig({ session: { writePatternAnswer: async () => false } });
+    await runSeed(opts({ scenario: "w2-learn", "pattern-answer": "confirm@10" }), refused.deps);
+    expect(refused.text()).toContain("Pattern answer: not written, the pattern was already rejected");
+  });
+
+  it("--weekly-opened writes the opened row of the week with the mode its story had, stamped on the Sunday after it", async () => {
+    const r = rig();
+    await runSeed(opts({ scenario: "w2-learn", "weekly-opened": "8" }), r.deps);
+    expect(r.calls).toEqual(["signIn", "writeProfile", "upsertShabbat", "listPeriods", "upsertMeals", "upsertWeeklySummary", "clockWrite"]);
+    expect(r.weekly).toEqual([
+      { week_start: "2026-09-20", opening_mode: "LEARN", content: { v: 1 }, generated_at: "2026-09-27T06:00:00.000Z", viewed_at: "2026-09-27T06:00:00.000Z" },
+    ]);
+    expect(r.text()).toContain("Weekly summary: the week of 2026-09-20 is opened (LEARN, 1 new), stamped 2026-09-27T09:00:00+03:00.");
+    expectNoLeak(r);
+
+    const celebrate = rig();
+    await runSeed(opts({ scenario: "w2-celebrate", "weekly-opened": "15" }), celebrate.deps);
+    expect(celebrate.weekly[0]).toMatchObject({ week_start: "2026-09-27", opening_mode: "CELEBRATE" });
+  });
+
+  it("--weekly-opened for a week that had no weekly moment writes nothing and says so", async () => {
+    const r = rig();
+    await runSeed(opts({ scenario: "w2-too-short", "weekly-opened": "8" }), r.deps);
+    expect(r.calls).not.toContain("upsertWeeklySummary");
+    expect(r.text()).toContain("Weekly summary: not written, that week has no weekly moment");
+    expectNoLeak(r);
+  });
+
+  it("a repeated run reports the rows that were already there", async () => {
+    const r = rig({ session: { upsertExperiments: async () => 0, upsertWeeklySummary: async () => 0 } });
+    await runSeed(opts({ scenario: "w3-result-due", "weekly-opened": "15" }), r.deps);
+    expect(r.text()).toContain("Experiments: 1 planned (0 new): active.");
+    expect(r.text()).toContain("already there");
+  });
+
+  it("--explain after a weekly run is asked at the clock the run wrote", async () => {
+    let explainedAt: Date | null = null;
+    const r = rig({
+      session: {
+        async explain(a) {
+          explainedAt = a.now;
+          return CLEAN_FACTS();
+        },
+      },
+    });
+    await runSeed(opts({ scenario: "w3-result-due", explain: true }), r.deps);
+    expect(explainedAt).toEqual(new Date("2026-10-04T06:00:00.000Z")); // Sunday day 22, 09:00 Asia/Jerusalem
+    expectNoLeak(r);
+  });
+});
 
 describe("the other modes", () => {
   it("--reset removes the user and nothing else; it needs the password but never prints it", async () => {
@@ -481,7 +618,7 @@ describe("--explain output", () => {
   });
 
   it("names why the Early Signal card is not on screen at this instant", () => {
-    const at = (iso: string) => CLEAN_FACTS({ now: new Date(iso), home: { state: { key: "MORNING" }, action: null, degraded: false } }).now;
+    const at = (iso: string) => CLEAN_FACTS({ now: new Date(iso), home: { state: { key: "MORNING" }, action: null, degraded: false, weeklyLink: false } }).now;
     const quiet = formatExplain(CLEAN_FACTS({ now: at("2026-09-16T00:00:00Z") })).join("\n"); // 03:00 local
     expect(quiet).toContain("quiet hours 00:00-08:00");
     const evening = formatExplain(CLEAN_FACTS({ now: at("2026-09-16T18:30:00Z") })).join("\n"); // 21:30 local
@@ -589,12 +726,22 @@ describe("refusals and failures never leak", () => {
     ["upsertMeals", "meals_failed"],
     ["dropMeals", "drop_failed"],
     ["explain", "explain_failed"],
+    ["upsertExperiments", "experiments_failed"],
+    ["writePatternAnswer", "pattern_failed"],
+    ["upsertWeeklySummary", "weekly_failed"],
   ])("a failing %s is %s and prints nothing of the error", async (method, code) => {
     const boom = async () => {
       throw new Error(`${method} blew up: ${PASSWORD} ${ADMIN_KEY} ${JWT} ${USER_ID} C:\\app\\.env.local`);
     };
     const r = rig({ session: { [method]: boom } });
-    const flags: Record<string, string | boolean> = method === "dropMeals" ? { "drop-meals": "2" } : method === "explain" ? { explain: true } : { scenario: "day3" };
+    const flagsOf: Record<string, Record<string, string | boolean>> = {
+      dropMeals: { "drop-meals": "2" },
+      explain: { explain: true },
+      upsertExperiments: { scenario: "w3-result-due" },
+      writePatternAnswer: { scenario: "w2-learn", "pattern-answer": "confirm@10" },
+      upsertWeeklySummary: { scenario: "w2-learn", "weekly-opened": "8" },
+    };
+    const flags: Record<string, string | boolean> = flagsOf[method] ?? { scenario: "day3" };
     const result = await runSeed(opts(flags), r.deps);
     expect(result).toEqual({ ok: false, code });
     expectNoLeak(r);

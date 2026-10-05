@@ -25,6 +25,7 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     quietHours: { kind: "NONE" },
     milestone: null,
     weekly: null,
+    activeExperiment: null,
     ...overrides,
   };
 }

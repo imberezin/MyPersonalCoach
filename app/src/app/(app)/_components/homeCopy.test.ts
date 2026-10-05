@@ -1,6 +1,6 @@
 import { createTranslator, type AbstractIntlMessages } from "use-intl/core";
 import { describe, expect, it } from "vitest";
-import { HOME_COPY_KEYS, homeCopyKey, type HomeAction, type HomeDecision, type HomeState } from "@/domain/home";
+import { HOME_COPY_KEYS, homeCopyKey, type ActiveExperimentFact, type HomeAction, type HomeDecision, type HomeState } from "@/domain/home";
 import { DEFAULT_TIME_ZONE } from "@/i18n/config";
 import en from "@/i18n/messages/en.json";
 import he from "@/i18n/messages/he.json";
@@ -24,6 +24,8 @@ const HAVDALAH = new Date("2027-01-09T15:25:00Z");
 const FORMAT = { locale: "he", timeZone: "Asia/Jerusalem" };
 const ACTION: HomeAction = { kind: "OPEN_REPORT_SHEET", reason: "FIRST_REPORT" };
 
+const EXPERIMENT: ActiveExperimentFact = { key: "eat_intentionally", variantId: "default", wording: "בארוחה הבאה — שב וקח כמה דקות בלי מסך.", locale: "he" };
+
 const STATES: Array<[string, HomeState]> = [
   ["morning", { key: "MORNING" }],
   ["evening", { key: "EVENING" }],
@@ -36,17 +38,20 @@ const STATES: Array<[string, HomeState]> = [
   ["Early Signal", { key: "EARLY_SIGNAL", signal: "late_evening_meals" }],
   ["a landmark", { key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: false }],
   ["the goal", { key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: true }],
+  ["your week", { key: "WEEKLY_SUMMARY_READY" }],
+  ["the active experiment", { key: "ACTIVE_EXPERIMENT", experiment: EXPERIMENT }],
   ["nothing to say", { key: "SILENCE", reason: "NOTHING_TO_SAY" }],
   ["Shabbat in progress", { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" }],
   ["a holiday in progress", { key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" }],
 ];
 
-const snoozeCards: ReadonlySet<HomeState["key"]> = new Set(["FIRST_WEEK_SUMMARY_READY", "FIRST_WEEK_WELCOME_BACK"]);
+const snoozeCards: ReadonlySet<HomeState["key"]> = new Set(["FIRST_WEEK_SUMMARY_READY", "FIRST_WEEK_WELCOME_BACK", "WEEKLY_SUMMARY_READY"]);
 
 const decision = (state: HomeState, over: Partial<HomeDecision> = {}): HomeDecision => ({
   state,
   action: null,
   degraded: false,
+  weeklyLink: false,
   ...over,
 });
 
@@ -84,6 +89,7 @@ describe("homeCopyFor", () => {
           copy.earlySignal?.reject,
           copy.milestone?.cta,
           copy.milestone?.ackLabel,
+          copy.experiment?.ackLabel,
           copy.degradedNote,
         ]
           .join("\n")
@@ -126,7 +132,7 @@ describe("homeCopyFor", () => {
       const words = homeText[locale];
       for (const [name, state] of STATES) {
         // First Week Start and the summary card say their piece in their own lead and body, so only their button is the
-        // invitation; the welcome-back card has its own sentence and button; the two cards that can be put away carry
+        // invitation; the welcome-back card has its own sentence and button; the three cards that can be put away carry
         // their "Not now"; the Early Signal card has no invitation at all (its three buttons are its answers).
         const expected =
           state.key === "FIRST_WEEK_START"
@@ -135,9 +141,11 @@ describe("homeCopyFor", () => {
               ? { lead: null, cta: (state.hadEnoughData ? words.firstWeekSummaryReady : words.firstWeekSummaryReadyLittle).cta, snoozeLabel: words.firstWeekSnooze }
               : state.key === "FIRST_WEEK_WELCOME_BACK"
                 ? { lead: words.firstWeekWelcomeBack.lead, cta: words.firstWeekWelcomeBack.cta, snoozeLabel: words.firstWeekSnooze }
-                : state.key === "EARLY_SIGNAL" || state.key === "MILESTONE_REACHED"
-                  ? null
-                  : { lead, cta, snoozeLabel: null };
+                : state.key === "WEEKLY_SUMMARY_READY"
+                  ? { lead: null, cta: words.weeklyReady.cta, snoozeLabel: words.weeklySnooze }
+                  : state.key === "EARLY_SIGNAL" || state.key === "MILESTONE_REACHED" || state.key === "ACTIVE_EXPERIMENT"
+                    ? null
+                    : { lead, cta, snoozeLabel: null };
         expect(snoozeCards.has(state.key) === (expected?.snoozeLabel != null), name).toBe(true);
         for (const degraded of [false, true]) {
           const where = `${locale}: ${name}, degraded ${degraded}`;
@@ -292,6 +300,43 @@ describe("homeCopyFor", () => {
     });
   });
 
+  describe("the weekly card", () => {
+    const state: HomeState = { key: "WEEKLY_SUMMARY_READY" };
+    const OPEN: HomeAction = { kind: "OPEN_WEEKLY_STORY" };
+
+    it.each(LOCALES)("%s: its own title and body, no opening line, no emoji, and a button with a Not now", (locale) => {
+      const words = homeText[locale];
+      const copy = homeCopyFor(decision(state, { action: OPEN }), translator(locale), { locale, timeZone: "Asia/Jerusalem" });
+      expect([copy.title, copy.body]).toEqual([words.weeklyReady.title, words.weeklyReady.body]);
+      expect(copy.lead).toBeNull();
+      expect(copy.emoji).toBeNull();
+      expect(copy.invitation).toEqual({ lead: null, cta: words.weeklyReady.cta, snoozeLabel: words.weeklySnooze });
+      expect(copy.earlySignal).toBeNull();
+      expect(copy.milestone).toBeNull();
+    });
+
+    it("says the spec's words in Hebrew", () => {
+      const copy = homeCopyFor(decision(state, { action: OPEN }), translator("he"), FORMAT);
+      expect(copy.title).toBe("השבוע שלך");
+      expect(copy.invitation).toEqual({ lead: null, cta: "לשבוע שלי", snoozeLabel: "לא עכשיו" });
+    });
+
+    it("has no digit, exclamation mark, percentage or score, in either language", () => {
+      for (const locale of LOCALES) {
+        const copy = homeCopyFor(decision(state, { action: OPEN }), translator(locale), { locale, timeZone: "UTC" });
+        const text = [copy.title, copy.lead, copy.body, copy.invitation?.cta, copy.invitation?.snoozeLabel].join("\n");
+        expect(text, locale).not.toMatch(/\d|!|%|score|ציון|אחוז/i);
+      }
+    });
+
+    it("has the quiet link's label as a flat string of its own, not as a card key", () => {
+      for (const locale of LOCALES) {
+        expect(typeof homeText[locale].weeklyLink).toBe("string");
+        expect(homeText[locale].weeklyLink.trim()).not.toBe("");
+      }
+    });
+  });
+
   describe("the Early Signal card (B4)", () => {
     const state: HomeState = { key: "EARLY_SIGNAL", signal: "late_evening_meals" };
     const ANSWER: HomeAction = { kind: "ANSWER_EARLY_SIGNAL" };
@@ -397,6 +442,66 @@ describe("homeCopyFor", () => {
       const copy = homeCopyFor(decision(REACHED, { action: OPEN, degraded: true }), translator("he"), FORMAT);
       expect(copy.degradedNote).toBe(homeText.he.degraded);
       expect(copy.milestone).not.toBeNull();
+    });
+  });
+
+  describe("the active-experiment card", () => {
+    const state: HomeState = { key: "ACTIVE_EXPERIMENT", experiment: EXPERIMENT };
+    const THANK: HomeAction = { kind: "THANK_ACTIVE_EXPERIMENT" };
+
+    it.each(LOCALES)("%s: the title, the sentence between the title and the body, the gentle line and one soft Thanks", (locale) => {
+      const words = homeText[locale];
+      const copy = homeCopyFor(decision(state, { action: THANK }), translator(locale), { locale, timeZone: "UTC", experimentText: "The sentence." });
+      expect([copy.title, copy.lead, copy.body]).toEqual([words.activeExperiment.title, "The sentence.", words.activeExperiment.body]);
+      expect(copy.experiment).toEqual({ ackLabel: words.activeExperimentAck });
+      expect(copy.emoji).toBeNull();
+      // Its one button is its own: no invitation (so no "Not now"), no Early Signal answers, no landmark buttons.
+      expect(copy.invitation).toBeNull();
+      expect(copy.earlySignal).toBeNull();
+      expect(copy.milestone).toBeNull();
+    });
+
+    it("says the spec's words in Hebrew", () => {
+      const copy = homeCopyFor(decision(state, { action: THANK }), translator("he"), { ...FORMAT, experimentText: "x" });
+      expect(copy.title).toBe("הניסוי הקטן שלך");
+      expect(copy.body).toBe("אם בא לך, אפשר לנסות בארוחה הבאה. אין צורך לדווח על כלום.");
+      expect(copy.experiment).toEqual({ ackLabel: "תודה" });
+    });
+
+    it("has no sentence when the page gave none, and no other state ever takes one", () => {
+      expect(homeCopyFor(decision(state, { action: THANK }), translator("he"), FORMAT).lead).toBeNull();
+      for (const [name, other] of STATES) {
+        if (other.key === "ACTIVE_EXPERIMENT" || other.key === "FIRST_WEEK_START") continue;
+        const copy = homeCopyFor(decision(other), translator("he"), { ...FORMAT, experimentText: "The sentence." });
+        expect(copy.lead, name).toBeNull();
+        expect(copy.experiment, name).toBeNull();
+      }
+    });
+
+    it("keeps the sentence as it is: no markup is interpreted and no placeholder is filled", () => {
+      const text = '<b>{time}</b> & "x"';
+      expect(homeCopyFor(decision(state, { action: THANK }), translator("he"), { ...FORMAT, experimentText: text }).lead).toBe(text);
+    });
+
+    it("has no digit, exclamation mark, percentage, score or counter around the sentence, in either language", () => {
+      for (const locale of LOCALES) {
+        const copy = homeCopyFor(decision(state, { action: THANK }), translator(locale), { locale, timeZone: "UTC" });
+        const text = [copy.title, copy.body, copy.experiment?.ackLabel].join("\n");
+        expect(text, locale).not.toMatch(/\d|!|%|score|ציון|אחוז|streak|רצף/i);
+      }
+    });
+
+    it("never asks for a report: no tried, not tried or helpful wording", () => {
+      for (const locale of LOCALES) {
+        const copy = homeCopyFor(decision(state, { action: THANK }), translator(locale), { locale, timeZone: "UTC" });
+        const text = [copy.title, copy.body, copy.experiment?.ackLabel].join("\n");
+        expect(text, locale).not.toMatch(/tried|helpful|report back|how did|ניסית|עזר|תדווח|איך היה/i);
+      }
+    });
+
+    it("still says the calm note when a fact was unknown", () => {
+      const copy = homeCopyFor(decision(state, { action: THANK, degraded: true }), translator("he"), FORMAT);
+      expect(copy.degradedNote).toBe(homeText.he.degraded);
     });
   });
 

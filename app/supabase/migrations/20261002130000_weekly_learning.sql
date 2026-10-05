@@ -6,8 +6,10 @@
 --     "own rows" policy; init.sql grants select, insert, update, delete on all of them).
 --   * Every existing row satisfies every constraint below (nothing wrote weekly_summaries before, and no DONE
 --     experiment exists), and the triggers act only on future deletes and updates.
---   * The one function runs as the caller (SECURITY INVOKER) with an empty search_path; it returns `trigger`, so it
---     cannot be called directly and there is no execute grant to manage.
+--   * The one function is SECURITY DEFINER with an empty search_path, exactly like audit_changes() on the same tables,
+--     because these triggers also fire when the auth service (supabase_auth_admin, no grant on public.*) deletes a whole
+--     account. As SECURITY INVOKER it failed there with "permission denied for table profiles" (found on the local
+--     stack, 2026-10-05). It returns `trigger`, so it cannot be called directly, and execute is revoked anyway.
 --   * It replaces no function of another item: it adds triggers that react to delete_meal_entry and
 --     delete_weight_entry, it never touches them.
 --   * Plain SQL only.
@@ -31,13 +33,14 @@ alter table public.experiments
 --    was confirmed), so a row must not outlive the data it was derived from. When a meal or a weight of a local week is
 --    deleted, or a weight's kilograms or time change, the row of that local week (in the profile's zone) is deleted in
 --    the SAME transaction. This is the single erasure point every derived store joins.
---    SECURITY INVOKER: RLS applies (the caller owns the row) and the statement also filters on the owner's id. The week
+--    SECURITY DEFINER (see the rules above): it only ever touches the rows of old.user_id, the owner of the meal or
+--    weight that was just deleted or changed, so it reaches nothing the caller was not already acting on. The week
 --    is the LOCAL Sunday; a time zone the database does not know falls back to Asia/Jerusalem, exactly like the app's
 --    resolveTimeZone, so a bad profile value can never make a delete fail.
 create function public.erase_weekly_summary_of_changed_source()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -46,6 +49,11 @@ declare
   v_one timestamptz;
   v_local date;
 begin
+  -- When the whole account is being deleted the auth row is already gone and its weekly rows go with it: nothing to do.
+  if not exists (select 1 from auth.users u where u.id = old.user_id) then
+    return null;
+  end if;
+
   select p.timezone into v_tz from public.profiles p where p.user_id = old.user_id;
 
   if tg_table_name = 'meal_entries' then
@@ -70,6 +78,8 @@ begin
   return null;      -- AFTER trigger: the return value is ignored
 end;
 $$;
+
+revoke execute on function public.erase_weekly_summary_of_changed_source() from public, anon, authenticated;
 
 create trigger meal_entries_erase_weekly_summary
   after delete on public.meal_entries

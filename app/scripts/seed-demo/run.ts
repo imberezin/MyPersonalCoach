@@ -6,6 +6,8 @@ import { assertSeedTarget } from "./guard";
 import { buildSeedPlan, firstWeekEndedAtOf, periodBeforeMeal, resolveAsOf, resolveRelative, startedAtOf, toMealRow, toProfileUpdate } from "./plan";
 import { seedShabbatRows, seedShabbatSeries, toPlanShabbat } from "./shabbat";
 import { toWeightRow } from "./weights";
+import { toExperimentRow, type PlannedPatternAnswer } from "./weekly";
+import { planWeeklyOpened, toWeeklySummaryRow } from "./weeklyEval";
 
 /**
  * The runner, with every outside thing injected (the Docker stack, the Auth API, the database, the clock file, the logger),
@@ -26,6 +28,8 @@ export interface StackStatus {
 export type ProfileUpdate = ReturnType<typeof toProfileUpdate>;
 export type MealRow = ReturnType<typeof toMealRow>;
 export type WeightEntryRow = ReturnType<typeof toWeightRow>;
+export type ExperimentRow = ReturnType<typeof toExperimentRow>;
+export type WeeklySummaryRow = ReturnType<typeof toWeeklySummaryRow>;
 
 /** A signed-in demo user. Every call runs as that user, so row level security applies exactly as in the app. */
 export interface DbSession {
@@ -42,6 +46,15 @@ export interface DbSession {
   upsertWeights(rows: readonly WeightEntryRow[]): Promise<number>;
   /** Deletes the newest weigh-ins through RLS and returns how many went. The audit trail is not touched. */
   dropWeights(count: number | "all"): Promise<number>;
+  /** Inserts the experiments that are not there yet (as the demo user, RLS applies) and returns how many were new. */
+  upsertExperiments(rows: readonly ExperimentRow[]): Promise<number>;
+  /**
+   * The person's answer to the late-evening question, written the way the app writes it: the evidence sync, then the answer and its
+   * time. false = nothing was written because the pattern was already rejected (the person's "not related" is final).
+   */
+  writePatternAnswer(answer: PlannedPatternAnswer): Promise<boolean>;
+  /** Inserts the opened weekly row of a week if it is not there yet and returns how many were new (0 or 1). */
+  upsertWeeklySummary(row: WeeklySummaryRow): Promise<number>;
   explain(a: { now: Date; clockFile: string | null; dailyCap: number }): Promise<ExplainFacts>;
 }
 
@@ -258,6 +271,24 @@ async function seed(options: SeedOptions, deps: SeedDeps, session: DbSession, em
     weightsCreated = await session.upsertWeights(plan.weights.map(toWeightRow));
   }
 
+  // Weekly Learning rows: only a run that asked for them touches these tables at all.
+  let experimentsCreated = 0;
+  if (plan.experiments.length > 0) {
+    stage("experiments");
+    experimentsCreated = await session.upsertExperiments(plan.experiments.map(toExperimentRow));
+  }
+  let answerWritten: boolean | null = null;
+  if (plan.patternAnswer !== null) {
+    stage("pattern");
+    answerWritten = await session.writePatternAnswer(plan.patternAnswer);
+  }
+  const opened = planWeeklyOpened(resolved, plan);
+  let openedCreated = 0;
+  if (opened !== null) {
+    stage("weekly");
+    openedCreated = await session.upsertWeeklySummary(toWeeklySummaryRow(opened));
+  }
+
   deps.log(`Seeded ${email}: ${plan.meals.length} meals planned (${created} new), ${periods} Shabbat periods, ${resolved.goals.length} goals.`);
   deps.log(`First Week began ${formatClockInstant(plan.startedAt, resolved.timeZone)}.`);
   if (resolved.lifecycle === "weekly_cycle") {
@@ -266,6 +297,24 @@ async function seed(options: SeedOptions, deps: SeedDeps, session: DbSession, em
   }
   if (resolved.weights !== "none" || resolved.junkWeights) {
     deps.log(`Weights: ${plan.weights.length} planned (${weightsCreated} new), start ${resolved.startWeightKg} kg, ${resolved.goalWeightKg === null ? "no goal weight" : `goal ${resolved.goalWeightKg} kg`}.`);
+  }
+
+  if (plan.experiments.length > 0) {
+    deps.log(`Experiments: ${plan.experiments.length} planned (${experimentsCreated} new): ${plan.experiments.map((e) => e.status.toLowerCase()).join(", ")}.`);
+  }
+  if (plan.patternAnswer !== null) {
+    deps.log(
+      answerWritten
+        ? `Pattern answer: ${plan.patternAnswer.answer} recorded at ${formatClockInstant(plan.patternAnswer.answeredAt, resolved.timeZone)}, ${plan.patternAnswer.occurrences.length} evidence rows.`
+        : "Pattern answer: not written, the pattern was already rejected (add --fresh to start over).",
+    );
+  }
+  if (resolved.weeklyOpened !== null) {
+    deps.log(
+      opened === null
+        ? "Weekly summary: not written, that week has no weekly moment at its Sunday (the app could not have opened it)."
+        : `Weekly summary: the week of ${opened.weekStart} is opened (${opened.openingMode}, ${openedCreated === 0 ? "already there" : "1 new"}), stamped ${formatClockInstant(opened.viewedAt, resolved.timeZone)}.`,
+    );
   }
 
   stage("clock");

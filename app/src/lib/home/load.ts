@@ -1,11 +1,12 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NOT_SNOOZED } from "@/domain/firstWeekFlow";
-import { homePeriodsWindow, resolveTimeZone, type HomeFacts } from "@/domain/home";
+import { HOME_FEATURES, homePeriodsWindow, resolveTimeZone, type HomeFacts } from "@/domain/home";
 import type { OfflinePeriod } from "@/domain/offline";
 import { PATTERN_FLOW, decideEarlySignal } from "@/domain/patterns";
 import { WEEKLY_FLOW } from "@/domain/weekly";
 import { DEFAULT_TIME_ZONE } from "@/i18n/config";
+import { loadActiveExperimentCard } from "@/lib/experiments/home";
 import { loadFirstWeekProgress, loadFirstWeekSnooze } from "@/lib/firstWeek/load";
 import { parseOfflinePeriodRows } from "@/lib/offline/rows";
 import type { OnboardingContext } from "@/lib/onboarding/context";
@@ -41,6 +42,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
     quietHours: null,
     milestone: null,
     weekly: null,
+    activeExperiment: null,
   };
   if (context.kind !== "ready") return nothingKnown;
 
@@ -54,7 +56,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
 
     const inWeeklyCycle = lifecycle === "WEEKLY_CYCLE";
 
-    const [offlinePeriods, hasAnyReport, firstWeek, firstWeekSnoozed, signal, milestone, weekly] = await Promise.all([
+    const [offlinePeriods, hasAnyReport, firstWeek, firstWeekSnoozed, signal, milestone, weekly, activeExperiment] = await Promise.all([
       loadOfflinePeriods(supabase, userId, now),
       loadHasAnyReport(supabase, userId),
       inFirstWeek ? loadFirstWeekProgress(supabase, userId, timeZone, now) : Promise.resolve(null),
@@ -68,12 +70,16 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
       // Weekly Learning: WEEKLY_CYCLE only, and the loader itself makes no query outside the card window (Sunday 05:00 to
       // Wednesday 05:00). null = nothing to show, or unknown: it never changes any other fact and never sets `degraded`.
       inWeeklyCycle && WEEKLY_FLOW.enabled ? loadWeeklyHomeFact(supabase, userId, { timeZone, now }) : Promise.resolve(null),
+      // The active-experiment card: WEEKLY_CYCLE only and behind its own switch (shipped OFF = zero queries). At most one `limit 1`
+      // read for a person with no active experiment. null = none, snoozed today, or unknown; never sets `degraded`.
+      inWeeklyCycle && HOME_FEATURES.activeExperimentCard ? loadActiveExperimentCard(supabase, userId, { timeZone, now }) : Promise.resolve(null),
     ]);
 
     // The data-level decision (pure); the resolver adds only the time-of-day rules.
     const earlySignal = signal === null ? null : decideEarlySignal({ view: signal.view, row: signal.row, now });
-    // A second stage that runs only when a card is otherwise due: better silent than intrusive when unknown.
-    const quietHours = earlySignal?.due ? await loadQuietHours(supabase, userId) : null;
+    // A second stage that runs only when a card that respects the quiet hours is otherwise due (the Early Signal, the active
+    // experiment): better silent than intrusive when unknown.
+    const quietHours = earlySignal?.due || activeExperiment !== null ? await loadQuietHours(supabase, userId) : null;
 
     return {
       now,
@@ -87,6 +93,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
       quietHours,
       milestone,
       weekly,
+      activeExperiment,
     };
   } catch {
     // The loaders catch their own failures; this only guards a malformed context.

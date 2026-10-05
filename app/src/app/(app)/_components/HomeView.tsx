@@ -8,7 +8,8 @@ import { OpenReportSheetButton } from "@/components/shell/OpenReportSheetButton"
 import { ButtonLink } from "@/components/ui/Button";
 import firstWeekStyles from "@/components/firstWeek/firstWeek.module.css";
 import weeklyStyles from "@/components/weekly/weekly.module.css";
-import { FIRST_WEEK_ROUTES, FIRST_WEEK_SNOOZE, type FirstWeekSnoozeCard } from "@/domain/firstWeekFlow";
+import { experimentTextFor } from "@/components/firstWeek/ExperimentView";
+import { FIRST_WEEK_ROUTES, FIRST_WEEK_SNOOZE, type HomeSnoozeCard } from "@/domain/firstWeekFlow";
 import type { HomeAction, HomeDecision } from "@/domain/home";
 import { WEEKLY_ROUTES } from "@/domain/weekly";
 import { WEIGHT_ROUTES } from "@/domain/weight";
@@ -24,7 +25,7 @@ const ANSWER_FIELD = "answer";
 const MILESTONE_FIELD = "week";
 
 /** "Not now": a tiny form of its own, so it works without JavaScript. The hidden field names the card to put away. */
-function SnoozeForm({ card, label, pendingLabel }: { card: FirstWeekSnoozeCard; label: string; pendingLabel: string }) {
+function SnoozeForm({ card, label, pendingLabel }: { card: HomeSnoozeCard; label: string; pendingLabel: string }) {
   return (
     <form action={snoozeFirstWeekCardAction}>
       <input type="hidden" name={FIRST_WEEK_SNOOZE.field} value={card} />
@@ -111,6 +112,16 @@ function renderAction(action: HomeAction, copy: HomeCopy, pendingLabel: string):
         </div>
       );
     }
+    case "THANK_ACTIVE_EXPERIMENT": {
+      // One soft "Thanks" and nothing else: the card is for re-reading the sentence, never for reporting. It reuses the snooze form
+      // (same action, same field), so a press only puts the card away for the rest of the local day.
+      if (!copy.experiment) return null;
+      return (
+        <div className={firstWeekStyles.homeActions}>
+          <SnoozeForm card={FIRST_WEEK_SNOOZE.experimentCard} label={copy.experiment.ackLabel} pendingLabel={pendingLabel} />
+        </div>
+      );
+    }
     case "ANSWER_EARLY_SIGNAL":
       return copy.earlySignal ? <EarlySignalAnswers answers={copy.earlySignal} pendingLabel={pendingLabel} /> : null;
     case "OPEN_PROGRESS": {
@@ -151,8 +162,16 @@ export async function HomeView({
   timeZone: string;
   renderedAt: number;
 }) {
-  const [t, tCommon, locale] = await Promise.all([getTranslations("home"), getTranslations("common"), getLocale()]);
-  const copy = homeCopyFor(decision, t, { locale, timeZone });
+  const { state } = decision;
+  const [t, tCommon, locale, tLibrary] = await Promise.all([
+    getTranslations("home"),
+    getTranslations("common"),
+    getLocale(),
+    // The library's sentences are needed only to show an experiment written in another language than the page's.
+    state.key === "ACTIVE_EXPERIMENT" ? getTranslations("interventions") : Promise.resolve(null),
+  ]);
+  const experimentText = state.key === "ACTIVE_EXPERIMENT" && tLibrary !== null ? experimentTextFor(state.experiment, locale, tLibrary) : undefined;
+  const copy = homeCopyFor(decision, t, { locale, timeZone, experimentText });
   // The Early Signal card has no invitation (its buttons are its answers), so the action alone decides.
   const action = decision.action ? renderAction(decision.action, copy, tCommon("loading")) : null;
 

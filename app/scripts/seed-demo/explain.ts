@@ -10,12 +10,23 @@ import {
   MILESTONE_MOMENT,
   WEIGHT_FLOW,
   addDaysToDayKey,
+  milestoneProgress,
   parseDayKey,
+  weeklyPoints,
   type MilestoneMoment,
   type MilestoneProgress,
   type TrendPoint,
   type WeightTrend,
 } from "@/domain/weight";
+import {
+  WEEKLY_FLOW,
+  WEEKLY_TIMING,
+  type WeeklyExperimentDecision,
+  type WeeklyHomeFact,
+  type WeeklyMoment,
+  type WeeklyStory,
+} from "@/domain/weekly";
+import { decideWeeklyLineGate } from "@/domain/weekly/wording";
 import { formatClockInstant } from "./clockfile";
 
 /**
@@ -99,6 +110,78 @@ export interface WeightExplain {
   reference: ExplainReference;
 }
 
+/** The landmark confirmed in the summarised week: its step number (1 = the first one after the start), whether it is the goal, and the two weeks of the pair. Never a kilogram figure. */
+export interface WeeklyLandmark {
+  index: number;
+  isGoal: boolean;
+  firstWeek: string | null;
+  secondWeek: string;
+}
+
+/**
+ * The landmark whose SECOND week of the pair is the summarised week: the one the weekly story would celebrate. The points are cut at
+ * that week, exactly as the weekly story does ("as of that week"). A step number and week dates, never a kilogram figure.
+ */
+export function landmarkConfirmedIn(a: {
+  series: { entries: Parameters<typeof weeklyPoints>[0]; truncated: boolean };
+  profile: { startKg: number | null; goalKg: number | null; goalType: "numeric" | "behavioral" | "none" };
+  weekStart: string;
+  timeZone: string;
+  now: Date;
+}): WeeklyLandmark | null {
+  const points = weeklyPoints(a.series.entries, a.timeZone, a.now).filter((p) => p.weekStart <= a.weekStart);
+  const progress = milestoneProgress({
+    startKg: a.profile.startKg,
+    goalKg: a.profile.goalKg,
+    goalType: a.profile.goalType,
+    weeklyPoints: points,
+    complete: !a.series.truncated,
+  });
+  if (progress.kind !== "LIST") return null;
+  const confirmed = progress.steps.filter((s) => s.index >= 1 && s.confirmedWeekStart === a.weekStart);
+  const highest = confirmed.reduce<(typeof confirmed)[number] | null>((best, s) => (best === null || s.index > best.index ? s : best), null);
+  if (highest === null || highest.confirmedWeekStart === null) return null;
+  return { index: highest.index, isGoal: highest.kind === "GOAL", firstWeek: highest.reachedWeekStart, secondWeek: highest.confirmedWeekStart };
+}
+
+/**
+ * What "your week" decides at the clock, collected with the app's own loaders and domain functions (db.ts). The lines name the
+ * candidate week and its readiness, the window, the moment, the Home card with the reason it shows or hides, the mode, the meal
+ * days and the return, the weight line KIND (never a figure), the experiment decision and the opening-line gate.
+ */
+export type WeeklyExplain =
+  | { kind: "SWITCHED_OFF" }
+  | { kind: "NOT_WEEKLY_CYCLE" }
+  | {
+      kind: "CYCLE";
+      week: { weekStart: string; start: Date; end: Date };
+      readyAt: Date;
+      moment: WeeklyMoment;
+      /** null unless the moment is READY. false = the profile keeps Shabbat but the Shabbat rows of the week are missing. */
+      periodsComplete: boolean | null;
+      card: {
+        /** The card window (Sunday 05:00 to Wednesday 05:00) is open. */
+        windowOpen: boolean;
+        /** A weekly_summaries row of the week exists. null = unknown. */
+        opened: boolean | null;
+        /** "Not now" was pressed in the last 24 hours. null = unknown. */
+        snoozed: boolean | null;
+        /** A confirmed meal or a weigh-in from the window start to the week's end. null = unknown. */
+        activity: boolean | null;
+        /** What the Home loader decided. */
+        fact: WeeklyHomeFact | null;
+      };
+      /** null unless the moment is READY and the story could be read. */
+      story: {
+        story: WeeklyStory;
+        decision: WeeklyExperimentDecision;
+        availableDays: number;
+        mealDays: number | null;
+        returned: boolean | null;
+        landmark: WeeklyLandmark | null;
+      } | null;
+    };
+
 export interface ExplainFacts {
   email: string;
   now: Date;
@@ -119,6 +202,8 @@ export interface ExplainFacts {
   dailyCap: number;
   /** null = the weight series could not be read. */
   weight: WeightExplain | null;
+  /** null = the weekly reads failed. */
+  weekly: WeeklyExplain | null;
 }
 
 function describeSelection(selection: ExperimentSelection | null): string {
@@ -245,6 +330,86 @@ function weightLines(f: ExplainFacts, w: WeightExplain): string[] {
   return lines;
 }
 
+function describeRationale(decision: Extract<WeeklyExperimentDecision, { kind: "OFFER" }>): string {
+  const r = decision.rationale;
+  return r.kind === "PATTERN" ? `PATTERN ${r.patternKind}` : r.kind === "GOAL" ? `GOAL ${r.goal}` : r.kind;
+}
+
+function describeDecision(decision: WeeklyExperimentDecision): string {
+  switch (decision.kind) {
+    case "NONE":
+      return `NONE (${decision.reason})`;
+    case "OFFER":
+      return `OFFER ${decision.key} / ${decision.variantId}, origin ${decision.origin}, rationale ${describeRationale(decision)}`;
+    case "PENDING":
+      return "PENDING (an offered experiment waits for the answer)";
+    case "ACTIVE":
+      return "ACTIVE (a started experiment, younger than the trial)";
+    case "RESULT_DUE":
+      return `RESULT_DUE (${decision.key ?? "unknown key"}: the result question comes first)`;
+  }
+}
+
+/** Why the Home card is, or is not, on screen for the week, in the order the app checks. */
+function weeklyCardReason(w: Extract<WeeklyExplain, { kind: "CYCLE" }>): string {
+  const { card } = w;
+  if (card.fact !== null && card.fact.card) return "SHOWN (the week is ready, untouched, and has activity)";
+  if (!card.windowOpen) return "no card: outside the card window (Sunday 05:00 until three local days later)";
+  if (w.moment.kind !== "READY") return `no card: the moment is NONE (${w.moment.reason})`;
+  if (!w.moment.cardVisible) return "no card: the card window of the week is over";
+  if (card.opened === null || card.snoozed === null) return "no card: the opened or snoozed state is unknown (unknown is silence)";
+  if (card.opened) return "no card: the week was already opened, only the quiet link shows";
+  if (card.snoozed) return "no card: snoozed for 24 hours, only the quiet link shows";
+  if (card.activity === null) return "no card: the week's activity could not be read";
+  if (!card.activity) return "no card: no confirmed meal and no weigh-in in the window, so there is no report to talk about";
+  return "no card: the app could not decide (a read failed)";
+}
+
+/** The weekly lines (15.1). Never a kilogram figure: the weight line is its kind, a landmark is a step number and two week dates. */
+function weeklyLines(f: ExplainFacts, w: WeeklyExplain): string[] {
+  const lines: string[] = [];
+  const tz = f.timeZone;
+  if (w.kind === "SWITCHED_OFF") return ["weekly: switched off (WEEKLY_FLOW.enabled is false), no card, no page"];
+  if (w.kind === "NOT_WEEKLY_CYCLE") return [`weekly: not in the weekly cycle (lifecycle ${f.lifecycle ?? "unknown"}), nothing weekly can happen`];
+
+  lines.push(`weekly week: ${w.week.weekStart} (Sunday to Saturday), ready from ${formatClockInstant(w.readyAt, tz)}`);
+  if (w.moment.kind === "READY") {
+    lines.push(`weekly window: ${formatClockInstant(w.moment.window.start, tz)} to ${formatClockInstant(w.moment.window.end, tz)}, ${w.moment.availableDays} available days (a window needs at least ${WEEKLY_TIMING.minAvailableDaysInWindow})`);
+    lines.push(`weekly moment: READY, the card window is ${w.moment.cardVisible ? "open" : "closed"}`);
+  } else {
+    lines.push(`weekly moment: NONE (${w.moment.reason})`);
+  }
+  lines.push(`weekly card: ${weeklyCardReason(w)}`);
+  lines.push(`Home weekly link: ${f.home.weeklyLink ? "yes (the card was opened or snoozed: one quiet link)" : "no"}`);
+  if (w.periodsComplete !== null) {
+    lines.push(w.periodsComplete ? "shabbat rows: complete for this week" : "shabbat rows missing for this week (the profile keeps Shabbat, so a return is never claimed)");
+  }
+  lines.push(`weekly starter experiments: switched ${WEEKLY_FLOW.starterExperimentsEnabled ? "on" : "off"}`);
+
+  const s = w.story;
+  if (s === null) {
+    lines.push(w.moment.kind === "READY" ? "weekly story: unknown (a read failed or was truncated)" : "weekly story: none (no weekly moment)");
+    return lines;
+  }
+  lines.push(`weekly mode: ${s.story.mode} (${s.story.reason}), opening line ${s.story.lineKey}`);
+  lines.push(`weekly meal days: ${s.mealDays === null ? "unknown" : s.mealDays}; return after a gap: ${s.returned === null ? "unknown" : s.returned ? "yes" : "no"}`);
+  lines.push(
+    `weekly weight line: ${s.story.weight.kind}; landmark confirmed this week: ${
+      s.landmark === null ? "none" : `step ${s.landmark.index}${s.landmark.isGoal ? " (the goal)" : ""}, the pair ${s.landmark.firstWeek ?? "?"} and ${s.landmark.secondWeek}`
+    }`,
+  );
+  lines.push(`weekly weigh-in invitation: ${s.story.invite.weighIn ? "shown" : "not shown"}`);
+  lines.push(`weekly experiment: ${describeDecision(s.decision)}`);
+  lines.push(`weekly pattern question: ${s.story.patternQuestion.kind === "ASK" ? `due (${s.story.patternQuestion.patternKind})` : "not due"}`);
+  const gate = decideWeeklyLineGate({
+    mode: s.story.mode,
+    availableDays: s.availableDays,
+    ai: { configured: ASSUMED_AI.configured, dailyCap: f.dailyCap, allowance: { allowed: true, usedToday: ASSUMED_AI.usedToday } },
+  });
+  lines.push(`weekly opening line gate (same assumption): ${gate.open ? "OPEN" : `CLOSED (${gate.reason})`}`);
+  return lines;
+}
+
 /** The decisions as lines. Never contains a secret: only the demo e-mail, counts, ISO instants and codes. */
 export function formatExplain(f: ExplainFacts): string[] {
   const lines: string[] = [];
@@ -308,14 +473,16 @@ export function formatExplain(f: ExplainFacts): string[] {
   lines.push(`experiment selection: ${describeSelection(f.selection)}`);
 
   lines.push(`wording gate evaluated assuming AI is configured, daily cap ${f.dailyCap}, nothing used yet`);
-  if (f.signal === null || f.progress === null) {
-    lines.push("wording gate: unknown (the signal or the First Week counts are not available)");
+  // In the First Week the available days are the First Week's; in the weekly cycle the weekly actions pass the weekly window's.
+  const gateDays = f.progress !== null ? f.progress.availableDays : f.weekly?.kind === "CYCLE" && f.weekly.story !== null ? f.weekly.story.availableDays : null;
+  if (f.signal === null || gateDays === null) {
+    lines.push("wording gate: unknown (the signal or the available days are not available)");
   } else {
     const gate = assumedWordingGate({
       view: f.signal.view,
       occurrences: f.signal.occurrences.length,
       distinctDays: new Set(f.signal.occurrences.map((o) => o.localDay)).size,
-      availableDays: f.progress.availableDays,
+      availableDays: gateDays,
       dailyCap: f.dailyCap,
     });
     lines.push(`wording gate: ${gate.open ? "OPEN" : `CLOSED (${gate.reason})`}`);
@@ -323,5 +490,7 @@ export function formatExplain(f: ExplainFacts): string[] {
 
   if (f.weight === null) lines.push("weights: unknown (the series could not be read)");
   else lines.push(...weightLines(f, f.weight));
+  if (f.weekly === null) lines.push("weekly: unknown (the weekly reads failed)");
+  else lines.push(...weeklyLines(f, f.weekly));
   return lines;
 }

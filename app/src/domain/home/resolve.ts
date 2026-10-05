@@ -155,6 +155,24 @@ function resolveState(facts: HomeFacts, timeZone: string): HomeState {
     minute < LATE_EVENING.startMinute;
   if (earlySignalShown) return { key: "EARLY_SIGNAL", signal: LATE_EVENING.kind };
 
+  // The active experiment, re-readable. A calm, optional card (no question, no report), so it is the last proactive card: it yields to
+  // everything above (the Shabbat and offline states, the weekly card, the First Week cards, the landmark and the Early Signal: one
+  // proactive card at a time) and replaces the clock sentences below it. Behind its own switch (shipped OFF). It needs lifecycle
+  // WEEKLY_CYCLE and a loaded fact (the loader already applied "Thanks" for today), and, like the Early Signal, KNOWN quiet hours
+  // and a clock outside them: never in quiet hours, and an unknown preference is better silent than intrusive. It is disjoint from
+  // B1 below by construction (WEEKLY_CYCLE vs FIRST_WEEK). (`?? null`: the resolver is total, so a caller that predates this fact
+  // reads it as "no experiment" instead of throwing.)
+  const experiment = facts.activeExperiment ?? null;
+  if (
+    HOME_FEATURES.activeExperimentCard &&
+    lifecycle === "WEEKLY_CYCLE" &&
+    experiment !== null &&
+    facts.quietHours !== null &&
+    !isQuiet(facts.quietHours, minute)
+  ) {
+    return { key: "ACTIVE_EXPERIMENT", experiment };
+  }
+
   // B1 First Week Start: no meal reported yet. It is content on the screen, not a notification, so it
   // holds at any hour. Only a known "no report" counts (null is unknown; a weight does not count, see noFirstReportYet),
   // only in FIRST_WEEK (a person who deleted every meal after the transition is never sent back to "our first week"),
@@ -185,6 +203,7 @@ function invitesFirstReport(state: HomeState): boolean {
     case "EARLY_SIGNAL":
     case "MILESTONE_REACHED":
     case "WEEKLY_SUMMARY_READY":
+    case "ACTIVE_EXPERIMENT":
       // They carry their own action (resolveAction), never the first-report invitation.
       return false;
     case "SILENCE":
@@ -208,6 +227,8 @@ function resolveAction(state: HomeState, facts: HomeFacts): HomeAction | null {
       return { kind: "OPEN_PROGRESS", week: state.week };
     case "WEEKLY_SUMMARY_READY":
       return { kind: "OPEN_WEEKLY_STORY" };
+    case "ACTIVE_EXPERIMENT":
+      return { kind: "THANK_ACTIVE_EXPERIMENT" };
     default:
       break;
   }
@@ -224,13 +245,19 @@ function resolveAction(state: HomeState, facts: HomeFacts): HomeAction | null {
 function weeklyLinkShown(facts: HomeFacts, state: HomeState): boolean {
   const weekly = facts.weekly ?? null;
   if (!WEEKLY_FLOW.enabled || facts.lifecycle !== "WEEKLY_CYCLE" || weekly === null || weekly.card) return false;
-  return state.key === "MORNING" || state.key === "EVENING" || (state.key === "SILENCE" && state.reason === "NOTHING_TO_SAY");
+  // The active-experiment card (when its switch is on) is a calm card too: the way back to the week must not vanish behind it.
+  return (
+    state.key === "MORNING" ||
+    state.key === "EVENING" ||
+    state.key === "ACTIVE_EXPERIMENT" ||
+    (state.key === "SILENCE" && state.reason === "NOTHING_TO_SAY")
+  );
 }
 
 /**
  * Pure, total, never throws. Precedence: offline > before Shabbat > Motzei Shabbat > weekly summary ready (WEEKLY_CYCLE) >
- * First Week summary ready > First Week welcome back > milestone reached > Early Signal > first week start > evening >
- * morning > silence.
+ * First Week summary ready > First Week welcome back > milestone reached > Early Signal > active experiment (switch, quiet
+ * hours known and outside) > first week start > evening > morning > silence.
  */
 export function resolveHome(facts: HomeFacts): HomeDecision {
   // An invalid instant cannot be formatted at all; say nothing rather than throw.
@@ -273,6 +300,8 @@ export function homeCopyKey(state: HomeState): HomeCopyKey {
       return state.isGoal ? "milestoneGoalReached" : "milestoneReached";
     case "WEEKLY_SUMMARY_READY":
       return "weeklyReady";
+    case "ACTIVE_EXPERIMENT":
+      return "activeExperiment";
     case "EARLY_SIGNAL":
       switch (state.signal) {
         case "late_evening_meals":

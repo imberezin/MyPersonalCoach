@@ -10,7 +10,13 @@ import { PGlite } from "@electric-sql/pglite";
 export const USER_A = "11111111-1111-4111-8111-111111111111";
 export const USER_B = "22222222-2222-4222-8222-222222222222";
 
-export type Role = "authenticated" | "anon" | "service_role";
+/**
+ * The timeout of a test that builds a SECOND database inside its body (replays every migration to check a migration over
+ * old rows). The default 30 s is too tight when several suites run at once; hooks have their own 60 s limit.
+ */
+export const OLD_DATABASE_TIMEOUT_MS = 120_000;
+
+export type Role ="authenticated" | "anon" | "service_role";
 
 const SUPABASE_SHIM = `
   create role anon nologin;

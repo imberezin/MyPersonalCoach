@@ -87,6 +87,7 @@ describe("loadHomeFacts: no profile to read", () => {
         quietHours: null,
         milestone: null,
         weekly: null,
+        activeExperiment: null,
       });
       expect(queries).toEqual([]);
     },
@@ -149,6 +150,7 @@ describe("loadHomeFacts: ready", () => {
       quietHours: null,
       milestone: null,
       weekly: null,
+      activeExperiment: null,
     });
   });
 

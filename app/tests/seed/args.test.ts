@@ -10,7 +10,7 @@ import {
   type SeedOptions,
 } from "../../scripts/seed-demo/args";
 
-type Flags = Record<string, string | number | boolean>;
+type Flags = Record<string, string | number | boolean | string[]>;
 const parse = (flags: Flags) => parseSeedArgs(JSON.stringify(flags));
 function ok(flags: Flags): SeedOptions {
   const result = parse(flags);
@@ -66,6 +66,12 @@ describe("defaults", () => {
       weightNoise: 0.6,
       junkWeights: false,
       junkDay: 30,
+      observesShabbat: true,
+      transitionDay: null,
+      firstWeighDay: null,
+      experiments: [],
+      patternAnswer: null,
+      weeklyOpened: null,
     });
   });
 
@@ -252,6 +258,26 @@ describe("presets (16.5): each fills its documented defaults, and explicit flags
   // The weight presets (15.3): weight only, the First Week is over, days = 3 mod 7 so the clock is a Wednesday.
   const W = { mealsPerDay: 0, lateDays: [], gapDays: [], doubleLateDays: [], aggregatedSaturdayNight: false, totalMeals: null, lifecycle: "weekly_cycle", startWeightKg: 80, goalWeightKg: 72, junkWeights: false } as const;
   const DOWN = { ...W, days: 45, weights: "weekly", weightSeries: [79.6, 78.9, 78.1, 77.4, 76.9, 76.2] } as const;
+  // The Weekly Learning presets (15.2): the First Week ended on day 8, three meals a day, no gap, no after-Shabbat report, 80 -> 72 kg.
+  const WK = {
+    mealsPerDay: 3,
+    gapDays: [],
+    doubleLateDays: [],
+    aggregatedSaturdayNight: false,
+    totalMeals: null,
+    lifecycle: "weekly_cycle",
+    transitionDay: 8,
+    startWeightKg: 80,
+    goalWeightKg: 72,
+    weighDay: 5,
+    firstWeighDay: null,
+    shabbat: true,
+    observesShabbat: true,
+    junkWeights: false,
+    experiments: [],
+    patternAnswer: null,
+    weeklyOpened: null,
+  } as const;
   const EXPECTED = {
     "w-none": { ...W, days: 24, weights: "none", weightSeries: null },
     "w-one": { ...W, days: 10, weights: "weekly", weightSeries: [79.5] },
@@ -270,6 +296,28 @@ describe("presets (16.5): each fills its documented defaults, and explicit flags
     absence: { days: 5, mealsPerDay: 3, lateDays: [], gapDays: [3, 4, 5], doubleLateDays: [], aggregatedSaturdayNight: null, totalMeals: null },
     "shabbat-week": { days: 8, mealsPerDay: 3, lateDays: [2, 3], gapDays: [5], doubleLateDays: [], aggregatedSaturdayNight: null, totalMeals: null },
     "max-days": { days: 17, mealsPerDay: 1, lateDays: [], gapDays: [], doubleLateDays: [], aggregatedSaturdayNight: false, totalMeals: 2 },
+    "w2-learn": { ...WK, days: 14, lateDays: [2, 3, 9, 10, 11, 12], weights: "none", weightSeries: null },
+    "w2-celebrate": { ...WK, days: 21, lateDays: [], goalWeightKg: 70, weights: "weekly", weightSeries: [75.9, 74.8, 74.6] },
+    "w2-recover": { ...WK, days: 14, lateDays: [], gapDays: [9, 10, 11], weights: "none", weightSeries: null },
+    "w2-quiet-none": { ...WK, days: 14, lateDays: [], gapDays: [9, 10, 11, 12, 13], weights: "none", weightSeries: null },
+    "w2-quiet-card": { ...WK, days: 14, lateDays: [], gapDays: [9, 10, 12, 13], weights: "none", weightSeries: null },
+    "w2-too-short": { ...WK, days: 14, lateDays: [], transitionDay: 12, weights: "none", weightSeries: null },
+    "w2-first-weigh-in": { ...WK, days: 14, lateDays: [], firstWeighDay: 9, weighDay: 1, weights: "weekly", weightSeries: [79.8] },
+    "w2-shabbat-rows-missing": { ...WK, days: 14, lateDays: [], gapDays: [9, 10, 11], shabbat: false, observesShabbat: true, weights: "none", weightSeries: null },
+    "w3-result-due": { ...WK, days: 21, lateDays: [2, 3, 9, 10, 17], weights: "none", weightSeries: null, experiments: [{ status: "ACTIVE", day: 9, key: "eat_intentionally", result: null }] },
+    "w4-history-rotation": {
+      ...WK,
+      days: 28,
+      lateDays: [9, 10, 16, 17, 24],
+      weights: "weekly",
+      weightSeries: [79.4, 79.8, 80.3, 80.9],
+      experiments: [
+        { status: "DONE", day: 9, key: "eat_intentionally", result: "helpful" },
+        { status: "DONE", day: 16, key: "slow_down", result: "not_tried" },
+      ],
+    },
+    "w4-down": { ...WK, days: 28, lateDays: [], weights: "weekly", weightSeries: [79.6, 78.9, 78.1, 77.4] },
+    "w4-goal": { ...WK, days: 28, lateDays: [], weights: "weekly", weightSeries: [78.0, 75.5, 71.9, 71.6] },
   } as const;
 
   it("covers every scenario", () => {
@@ -289,6 +337,140 @@ describe("presets (16.5): each fills its documented defaults, and explicit flags
     expect(ok({ scenario: "day3", "meals-per-day": "1" }).mealsPerDay).toBe(1);
     expect(ok({ scenario: "absence", "gap-days": "none" }).gapDays).toEqual([]);
     expect(ok({ scenario: "shabbat-week", shabbat: "false" }).shabbat).toBe(false);
+  });
+});
+
+describe("the Weekly Learning flags (15.1)", () => {
+  it("every flag parses", () => {
+    const o = ok({
+      days: "28",
+      "transition-day": "8",
+      "first-weigh-day": "9",
+      weights: "weekly",
+      exp: ["done@9:helpful:slow_down", "active@16"],
+      "pattern-answer": "confirm@10",
+      "weekly-opened": "15",
+    });
+    expect(o).toMatchObject({
+      lifecycle: "weekly_cycle",
+      transitionDay: 8,
+      firstWeighDay: 9,
+      weights: "weekly",
+      patternAnswer: { answer: "confirm", day: 10 },
+      weeklyOpened: 15,
+      action: "seed",
+      experiments: [
+        { status: "DONE", day: 9, key: "slow_down", result: "helpful" },
+        { status: "ACTIVE", day: 16, key: "eat_intentionally", result: null },
+      ],
+    });
+  });
+
+  it("--transition-day implies the weekly cycle, is refused next to --lifecycle first_week and must be a day of the run (2 up to the as-of day)", () => {
+    expect(ok({ days: "10", "transition-day": "8" })).toMatchObject({ lifecycle: "weekly_cycle", transitionDay: 8 });
+    expect(ok({ days: "10", lifecycle: "weekly_cycle", "transition-day": "10" }).transitionDay).toBe(10);
+    expect(error({ days: "10", lifecycle: "first_week", "transition-day": "8" })).toMatch(/--transition-day/);
+    for (const value of ["1", "0", "11", "x", "", "2.5", "-3"]) expect(error({ days: "10", "transition-day": value }), value).toMatch(/--transition-day/);
+    expect(ok({ days: "10", "transition-day": "2" }).transitionDay).toBe(2);
+    // The as-of day, not --days, is the limit.
+    expect(ok({ days: "10", "as-of": "day 14", "transition-day": "14" }).transitionDay).toBe(14);
+    expect(error({ days: "10", "as-of": "day 12", "transition-day": "13" })).toMatch(/--transition-day/);
+  });
+
+  it("--first-weigh-day is 2 up to the as-of day, and parses without a weekly weights mode (the plan then ignores it)", () => {
+    expect(ok({ days: "12", "first-weigh-day": "9", weights: "weekly" }).firstWeighDay).toBe(9);
+    expect(ok({ days: "12", "first-weigh-day": "9" })).toMatchObject({ firstWeighDay: 9, weights: "none" });
+    for (const value of ["1", "0", "13", "x", ""]) expect(error({ days: "12", "first-weigh-day": value }), value).toMatch(/--first-weigh-day/);
+  });
+
+  it("--exp: the five statuses and their forms, the default key, and the sorted order", () => {
+    const o = ok({ days: "30", exp: ["done@16:not_tried:slow_down", "skipped@5:eat_intentionally", "offered@28", "done@9:somewhat"] });
+    expect(o.experiments.map((e) => [e.status, e.day, e.key, e.result])).toEqual([
+      ["SKIPPED", 5, "eat_intentionally", null],
+      ["DONE", 9, "eat_intentionally", "somewhat"],
+      ["DONE", 16, "slow_down", "not_tried"],
+      ["OFFERED", 28, "eat_intentionally", null],
+    ]);
+    expect(ok({ days: "12", exp: "active@9:slow_down" }).experiments).toEqual([{ status: "ACTIVE", day: 9, key: "slow_down", result: null }]);
+    for (const result of ["helpful", "somewhat", "not_really", "unknown", "not_tried"]) expect(ok({ days: "20", exp: `done@9:${result}` }).experiments[0].result).toBe(result);
+  });
+
+  it("--exp refuses a malformed value, an unknown status, result or key, and a day outside the run", () => {
+    const refused = [
+      "active", "active@", "@9", "paused@9", "active@x", "ACTIVE@9", "active@9:", "active@9:nope", "active@9:eat_intentionally:extra",
+      "done@9", "done@9:great", "done@9:HELPFUL", "done@9:helpful:nope", "done@9:helpful:slow_down:extra", "active@9:helpful",
+    ];
+    for (const exp of refused) expect(error({ days: "20", exp }), exp).toMatch(/--exp/);
+    expect(error({ days: "20", exp: true })).toMatch(/--exp/);
+    expect(error({ days: "12", exp: "active@13" })).toMatch(/--exp/);
+    expect(error({ days: "12", exp: "active@1" })).toMatch(/--exp/);
+    expect(error({ days: "12", exp: "done@7:helpful" })).toMatch(/--exp/); // it would end on day 14, after the clock
+    expect(ok({ days: "12", exp: "done@6:helpful" }).experiments).toHaveLength(1); // ends day 13 09:00, the clock is day 13 09:00
+  });
+
+  it("--exp: at most one open row and it is the last; a row starts after the one before it ended", () => {
+    expect(error({ days: "30", exp: ["active@9", "offered@20"] })).toMatch(/at most one experiment is open/);
+    expect(error({ days: "30", exp: ["offered@9", "done@16:helpful"] })).toMatch(/at most one experiment is open/);
+    expect(error({ days: "30", exp: ["done@9:helpful", "done@15:helpful"] })).toMatch(/starts after the one before it ended/);
+    expect(error({ days: "30", exp: ["skipped@9", "skipped@9"] })).toMatch(/starts after the one before it ended/);
+    expect(ok({ days: "30", exp: ["done@9:helpful", "done@16:helpful", "active@23"] }).experiments).toHaveLength(3);
+    expect(ok({ days: "30", exp: ["skipped@9", "offered@10"] }).experiments).toHaveLength(2);
+  });
+
+  it("only --exp may be given twice", () => {
+    for (const [flag, value] of [["days", ["3", "4"]], ["scenario", ["day3", "day4-candidate"]], ["goals", ["lose_weight", "feel_lighter"]], ["fresh", ["true", "true"]]] as const) {
+      expect(error({ [flag]: [...value] }), flag).toMatch(new RegExp(`--${flag} may be given only once`));
+    }
+  });
+
+  it("--pattern-answer takes the three answers and a day of the run", () => {
+    for (const answer of ["confirm", "unsure", "reject"]) expect(ok({ days: "12", "pattern-answer": `${answer}@9` }).patternAnswer).toEqual({ answer, day: 9 });
+    for (const value of ["confirm", "confirm@", "maybe@9", "CONFIRM@9", "confirm@x", "confirm@1", "confirm@13", "confirm@9@9", ""]) {
+      expect(error({ days: "12", "pattern-answer": value }), value).toMatch(/--pattern-answer/);
+    }
+  });
+
+  it("--weekly-opened is the Sunday that starts a week that has ended by the clock", () => {
+    expect(ok({ days: "21", "weekly-opened": "15" }).weeklyOpened).toBe(15); // Sunday 09-27; the row is stamped Sunday day 22 09:00 = the clock
+    expect(ok({ days: "21", "weekly-opened": "8" }).weeklyOpened).toBe(8);
+    expect(error({ days: "21", "weekly-opened": "9" })).toMatch(/Sunday/); // a Monday
+    expect(error({ days: "20", "weekly-opened": "15" })).toMatch(/not be after the clock/); // day 22 09:00 is after day 21 09:00
+    expect(ok({ days: "21", "as-of": "day 22", "weekly-opened": "15" }).weeklyOpened).toBe(15);
+    expect(error({ days: "21", "weekly-opened": "x" })).toMatch(/--weekly-opened/);
+    expect(error({ days: "21", "weekly-opened": "0" })).toMatch(/--weekly-opened/);
+    // Another start date moves the Sundays.
+    expect(error({ days: "21", start: "2026-09-14", "weekly-opened": "15" })).toMatch(/Sunday/);
+    expect(ok({ days: "21", start: "2026-09-14", "weekly-opened": "14" }).weeklyOpened).toBe(14);
+  });
+
+  it("--shabbat follows into observes_shabbat, except in the preset that keeps Shabbat with its rows missing", () => {
+    expect(ok({ shabbat: "false" })).toMatchObject({ shabbat: false, observesShabbat: false });
+    expect(ok({ shabbat: "true" })).toMatchObject({ shabbat: true, observesShabbat: true });
+    expect(ok({ scenario: "w2-shabbat-rows-missing" })).toMatchObject({ shabbat: false, observesShabbat: true });
+    expect(ok({ scenario: "w2-shabbat-rows-missing", shabbat: "true" })).toMatchObject({ shabbat: true, observesShabbat: true });
+    expect(ok({ scenario: "w2-shabbat-rows-missing", shabbat: "false" })).toMatchObject({ shabbat: false, observesShabbat: false });
+    expect(error({ "observes-shabbat": "true" })).toMatch(/Unknown flag/);
+  });
+
+  it("explicit flags override a weekly preset, and --exp replaces the preset's experiments", () => {
+    expect(ok({ scenario: "w3-result-due", exp: "active@10" }).experiments).toEqual([{ status: "ACTIVE", day: 10, key: "eat_intentionally", result: null }]);
+    expect(ok({ scenario: "w3-result-due", days: "28" }).experiments).toHaveLength(1);
+    expect(ok({ scenario: "w2-learn", "transition-day": "9" }).transitionDay).toBe(9);
+    expect(ok({ scenario: "w2-first-weigh-in", "weigh-day": "3" }).weighDay).toBe(3);
+    expect(ok({ scenario: "w2-first-weigh-in", "first-weigh-day": "10" }).firstWeighDay).toBe(10);
+    expect(ok({ scenario: "w2-learn", lifecycle: "first_week" }).lifecycle).toBe("first_week");
+  });
+
+  it("every weekly preset gives a valid run on its own (its experiments pass the same checks as the flag)", () => {
+    for (const scenario of SEED_SCENARIOS.filter((s) => /^w[234]-/.test(s))) {
+      const o = ok({ scenario });
+      expect(o.lifecycle, scenario).toBe("weekly_cycle");
+      expect(o.transitionDay, scenario).not.toBeNull();
+      for (const e of o.experiments) {
+        expect(e.day, scenario).toBeGreaterThanOrEqual(2);
+        if (e.status === "DONE") expect(e.day + 7, scenario).toBeLessThanOrEqual(o.days + 1);
+      }
+    }
   });
 });
 

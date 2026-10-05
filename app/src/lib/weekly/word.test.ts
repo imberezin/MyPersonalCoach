@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AI_WORDING } from "@/domain/experiments/wording/constants";
+import { validateWording } from "@/domain/experiments/wording/validate";
 import { WEEKLY_FLOW, type OpeningMode } from "@/domain/weekly/types";
 import type { checkAiAllowance } from "@/lib/ai/allowance";
 import { readAiConfig } from "@/lib/ai/config";
@@ -46,12 +47,18 @@ function harness(
     providers?: "none" | "fake";
     gateway?: AIGateway;
     logError?: () => Promise<void>;
+    /** The exact text the provider answers (instead of the fake's wording behavior). */
+    answer?: string;
   } = {},
 ): Harness {
   let calls = 0;
   const records: AiCallRecord[] = [];
   const recorder: AIRecorder = { record: (rec) => void records.push(rec) };
   const provider = new FakeAIProvider("fake", options.behavior ?? {});
+  if (options.answer !== undefined) {
+    const text = options.answer;
+    provider.generateInsight = () => Promise.resolve({ output: { text }, model: "fake-1" });
+  }
   const original = provider.generateInsight.bind(provider);
   provider.generateInsight = (context, ctx) => {
     calls++;
@@ -298,6 +305,56 @@ describe("produceWeeklyLineWording: any failure after the gate falls back to the
     const wordWeeklyLine = vi.spyOn(h.deps.runtime.gateway, "wordWeeklyLine");
     await produceWeeklyLineWording(h.deps, input({}, "en"));
     expect(wordWeeklyLine.mock.calls[0][0]).toMatchObject({ locale: "en", facts: { max_chars: 180 } });
+  });
+});
+
+describe("produceWeeklyLineWording: the weekly-only second check (weight and body claims, praise, a verdict on the person)", () => {
+  // Every candidate passes the First Week validator (asserted below); only the weekly check stops it.
+  const HE_START = "עוד חלק קטן נכנס לתמונה של מה שמתאים לך";
+  const EN_START = "One more small piece fell into the picture of what suits you";
+  const HOSTILE = {
+    he: ["וירדת", "ואת רזה יותר", "ונראה שירדת בקילוגרמים", "וההשמנה מאחוריך", "אתה כושל", "כל הכבוד", "מצוין", "מעולה", "וגם הצלחת", "עשית עבודה טובה", "בהצלחה רבה"],
+    en: ["and you slimmed down", "and you got thinner", "and the scale agrees", "you are doing great", "well done", "keep it up", "great progress"],
+  } as const;
+
+  it.each([
+    ...HOSTILE.he.map((tail) => ["he", `${HE_START}, ${tail}.`] as const),
+    ...HOSTILE.en.map((tail) => ["en", `${EN_START}, ${tail}.`] as const),
+  ])("(%s) %s is replaced by the approved sentence, byte for byte", async (locale, candidate) => {
+    // Precondition: the shared validator alone lets it through, so the new check is the one that does the work.
+    expect(validateWording({ candidate, approved: APPROVED[locale], locale })).toMatchObject({ ok: true });
+
+    const h = harness({ answer: candidate });
+    const outcome = await produceWeeklyLineWording(h.deps, input({}, locale));
+    expect(outcome).toEqual({ source: "catalog", text: APPROVED[locale], reason: "rejected_weekly_extra" });
+    expect(h.logCalls).toHaveBeenCalledWith({ userId: "user-1", area: "ai", message: "weekly_line_rejected", context: { check: "weekly_extra" } });
+    // Codes only: nothing of the candidate reaches the log.
+    expect(JSON.stringify(h.logCalls.mock.calls)).not.toContain(candidate.slice(-8));
+  });
+
+  it("the fake's own one-word tail is still accepted as source ai (one new token, nothing forbidden)", async () => {
+    for (const locale of ["he", "en"] as const) {
+      expect((await produceWeeklyLineWording(harness().deps, input({}, locale))).source).toBe("ai");
+    }
+  });
+
+  it("two new words are over the tighter limit even when neither is forbidden", async () => {
+    const candidate = `${EN_START}, quietly and gently.`;
+    expect(validateWording({ candidate, approved: APPROVED.en, locale: "en" })).toMatchObject({ ok: true });
+    expect(await produceWeeklyLineWording(harness({ answer: candidate }).deps, input({}, "en"))).toMatchObject({ source: "catalog", reason: "rejected_weekly_extra" });
+  });
+
+  it.each([
+    ["he", APPROVED.he.replace("קטן ", "")],
+    ["en", APPROVED.en.replace("small ", "").replace("more ", "")],
+  ] as const)("dropping original words is under the tighter overlap (%s)", async (locale, candidate) => {
+    expect(validateWording({ candidate, approved: APPROVED[locale], locale })).toMatchObject({ ok: true });
+    expect(await produceWeeklyLineWording(harness({ answer: candidate }).deps, input({}, locale))).toMatchObject({ source: "catalog", reason: "rejected_weekly_extra" });
+  });
+
+  it("a forbidden word the approved sentence itself contains is not a new claim", async () => {
+    const outcome = await produceWeeklyLineWording(harness({ answer: "You can lose the pressure, gently." }).deps, input({ approvedText: "You can lose the pressure." }, "en"));
+    expect(outcome).toMatchObject({ source: "ai", text: "You can lose the pressure, gently." });
   });
 });
 

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { USER_A, USER_B, as, createTestDb } from "./harness";
+import { OLD_DATABASE_TIMEOUT_MS, USER_A, USER_B, as, createTestDb } from "./harness";
 
 /**
  * Pattern detection (migration 20261001170000) on a real Postgres: the single evidence writer
@@ -602,7 +602,8 @@ describe("migration 2 over a database that already has rows", () => {
     } finally {
       await old.close();
     }
-  });
+    // A second database is built inside the test: under a loaded machine it needs more than the 30 s default.
+  }, OLD_DATABASE_TIMEOUT_MS);
 });
 
 describe("the evidence writer's meal guard", () => {

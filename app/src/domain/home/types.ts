@@ -1,5 +1,6 @@
 import type { LifecycleState } from "../firstWeek";
 import type { FirstWeekProgress, FirstWeekSnoozed } from "../firstWeekFlow/types";
+import type { InterventionKey } from "../interventions/library";
 import type { OfflinePeriod, OfflineType } from "../offline";
 import type { EarlySignalDecision } from "../patterns/earlySignal";
 import type { PatternKind } from "../patterns/types";
@@ -29,7 +30,25 @@ export const HOME_TIMING = {
 export const HOME_FEATURES = {
   /** Offer the first-report invitation (leads to the Report sheet). false -> `action` is always null and the First Week Start screen is not shown. */
   firstReportInvitation: true,
+  /**
+   * A calm Home card for the person's ACTIVE experiment ("Your small experiment"): its stored sentence and one "Thanks" that hides
+   * it for the rest of the local day. Not a report and never a question. SHIPS OFF: false -> the loader makes no query and the
+   * resolver never shows the card (the experiment is still on /week and /progress). Needs the owner's approval of the copy to go on.
+   */
+  activeExperimentCard: false,
 } as const;
+
+/**
+ * The person's ACTIVE experiment as the Home card needs it: enough for the page to pick the sentence to show (the stored wording
+ * when it was written in the page's language, otherwise the library's, as experimentTextFor does). Carries no id and no count.
+ */
+export interface ActiveExperimentFact {
+  key: InterventionKey;
+  variantId: string;
+  /** The stored sentence, library or validated AI wording. Plain text: the page renders it escaped. */
+  wording: string;
+  locale: "he" | "en";
+}
 
 export interface HomeFacts {
   /** The instant Home is rendered for. Injected; the domain never reads the clock. */
@@ -48,7 +67,7 @@ export interface HomeFacts {
   firstWeekSnoozed: FirstWeekSnoozed;
   /** B4, data level: does the live late-evening signal call for the Early Signal card, given the person's earlier answer and the cooldown? Non-null only when lifecycle === "FIRST_WEEK" AND the signal loaded; null = unknown, and then there is simply no card. The resolver adds only the time-of-day rules. */
   earlySignal: EarlySignalDecision | null;
-  /** The person's quiet hours. Read ONLY when earlySignal.due; null = not read or unknown, and then there is no Early Signal card (better silent than intrusive). */
+  /** The person's quiet hours. Read ONLY when earlySignal.due or an active-experiment card is otherwise due; null = not read or unknown, and then there is no Early Signal card and no experiment card (better silent than intrusive). */
   quietHours: QuietHours | null;
   /** The landmark achievement Home may show now (derived from the weekly weight averages; carries no number). null = none, or unknown: an unknown read is never a celebration. */
   milestone: MilestoneMoment | null;
@@ -59,6 +78,12 @@ export interface HomeFacts {
    * is one fact. Non-null only when lifecycle === "WEEKLY_CYCLE"; the resolver ignores it otherwise.
    */
   weekly: WeeklyHomeFact | null;
+  /**
+   * The ACTIVE experiment whose Home card has not been put away today. Non-null only when HOME_FEATURES.activeExperimentCard is on,
+   * lifecycle === "WEEKLY_CYCLE" and the loader found an ACTIVE row with a readable sentence and no "Thanks" earlier today.
+   * null = none, snoozed, or unknown: an unknown read is never a card. The loader applies the snooze, so this is one fact.
+   */
+  activeExperiment: ActiveExperimentFact | null;
 }
 
 export type HomeState =
@@ -78,6 +103,8 @@ export type HomeState =
   | { key: "MILESTONE_REACHED"; week: string; isGoal: boolean }
   /** Weekly Learning: "your week" is ready (WEEKLY_CYCLE only). One calm card with "To my week" and "Not now". Carries no number. */
   | { key: "WEEKLY_SUMMARY_READY" }
+  /** The active experiment, re-readable: its sentence, one gentle line and a "Thanks" that puts the card away for the day. Not a report. */
+  | { key: "ACTIVE_EXPERIMENT"; experiment: ActiveExperimentFact }
   | { key: "SILENCE"; reason: "NOTHING_TO_SAY" }
   | { key: "SILENCE"; reason: "OFFLINE_PERIOD"; periodType: OfflineType };
 export type HomeStateKey = HomeState["key"];
@@ -88,7 +115,8 @@ export type HomeAction =
   | { kind: "OPEN_FIRST_WEEK_SUMMARY" }
   | { kind: "ANSWER_EARLY_SIGNAL" }
   | { kind: "OPEN_PROGRESS"; week: string }
-  | { kind: "OPEN_WEEKLY_STORY" };
+  | { kind: "OPEN_WEEKLY_STORY" }
+  | { kind: "THANK_ACTIVE_EXPERIMENT" };
 
 export interface HomeDecision {
   state: HomeState;
@@ -97,13 +125,14 @@ export interface HomeDecision {
   degraded: boolean;
   /**
    * True iff the weekly card was already opened or snoozed (`weekly.card === false`) in WEEKLY_CYCLE and the state is a calm clock
-   * state (MORNING, EVENING, SILENCE / NOTHING_TO_SAY): Home then shows one quiet "Your week" link to /week, under the clock card.
+   * state (MORNING, EVENING, SILENCE / NOTHING_TO_SAY) or the active-experiment card: Home then shows one quiet "Your week" link to
+   * /week, under the card.
    * A link, never a second card, never beside the card itself and never in a Shabbat or offline state. It is not an action.
    */
   weeklyLink: boolean;
 }
 
-/** Keys under `home.*` in the message catalogs; each has a `title` and a `body` (`firstWeekStart` also has a `lead` and a `cta`; the welcome-back and summary cards a `cta`). */
+/** Keys under `home.*` in the message catalogs; each has a `title` and a `body` (`firstWeekStart` also has a `lead` and a `cta`; the welcome-back and summary cards a `cta`; `activeExperiment` shows the person's own sentence between its title and body). */
 export const HOME_COPY_KEYS = [
   "morning",
   "evening",
@@ -120,5 +149,6 @@ export const HOME_COPY_KEYS = [
   "milestoneReached",
   "milestoneGoalReached",
   "weeklyReady",
+  "activeExperiment",
 ] as const;
 export type HomeCopyKey = (typeof HOME_COPY_KEYS)[number];

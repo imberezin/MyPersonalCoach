@@ -55,15 +55,18 @@ function decide(plan: SeedPlan, o: SeedOptions) {
     earlySignal,
     quietHours: DEFAULT_QUIET,
     milestone: null,
+    weekly: null,
+    activeExperiment: null,
   });
   return { progress, step, occurrences, view, gate, home, periods };
 }
 
 // The expected values of 16.5, one row per preset. The blueprint's table is the spec; the plan must reproduce it
 // through the domain functions the app itself uses.
-// (The weight presets are checked in tests/seed/weights.test.ts: they have no meals.)
-type MealScenario = Exclude<SeedScenario, `w-${string}`>;
-const MEAL_SCENARIOS = SEED_SCENARIOS.filter((s): s is MealScenario => !s.startsWith("w-"));
+// (The weight presets are checked in tests/seed/weights.test.ts: they have no meals. The Weekly Learning presets are checked in
+// tests/seed/weeklyPlan.test.ts: they are weekly-cycle runs, not First Week ones.)
+type MealScenario = Exclude<SeedScenario, `w-${string}` | `w${2 | 3 | 4}-${string}`>;
+const MEAL_SCENARIOS = SEED_SCENARIOS.filter((s): s is MealScenario => !/^w\d?-/.test(s));
 const EXPECTED: Record<
   MealScenario,
   {

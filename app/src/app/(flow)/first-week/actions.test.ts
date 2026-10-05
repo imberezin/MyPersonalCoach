@@ -1,8 +1,8 @@
 // What the First Week Server Actions do, with every outside piece mocked: the session, the loaders, the writers, the
 // event sink and the clock. The real redirect() and revalidatePath() are replaced; the rules (decideEarlySignal,
 // effectivePatternStatus, activeSnoozes, the closed lists) run for real.
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { activeSnoozes, FIRST_WEEK_SNOOZE } from "@/domain/firstWeekFlow";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activeSnoozes, experimentCardSnoozed, FIRST_WEEK_SNOOZE } from "@/domain/firstWeekFlow";
 import { toDbStatus, type Occurrence, type PatternRow, type PatternView } from "@/domain/patterns";
 import { classifyPattern } from "@/domain/patternLifecycle";
 import { answerEarlySignalAction, finishFirstWeekAction, snoozeFirstWeekCardAction } from "./actions";
@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   sync: vi.fn(),
   record: vi.fn(),
   flow: { summaryEnabled: true, welcomeBackEnabled: true, acknowledgementEnabled: true },
+  home: { firstReportInvitation: true, activeExperimentCard: false },
   pattern: { detectionEnabled: true, earlySignalEnabled: true, experimentEnabled: true, syncOnMealChange: true },
 }));
 
@@ -42,6 +43,10 @@ vi.mock("@/lib/patterns/feedback", () => ({ recordPatternFeedback: mocks.record 
 vi.mock("@/domain/firstWeekFlow", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/domain/firstWeekFlow")>()),
   FIRST_WEEK_FLOW: mocks.flow,
+}));
+vi.mock("@/domain/home", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/domain/home")>()),
+  HOME_FEATURES: mocks.home,
 }));
 vi.mock("@/domain/patterns", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/domain/patterns")>()),
@@ -547,5 +552,94 @@ describe("answerEarlySignalAction", () => {
       await expect(outcome(() => answerEarlySignalAction(answer("unsure")))).resolves.toBe("REDIRECT:/");
       for (const fn of writes()) expect(fn).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("snoozeFirstWeekCardAction: the active-experiment card's Thanks", () => {
+  beforeEach(() => {
+    mocks.home.activeExperimentCard = true;
+    mocks.context.current = ready("WEEKLY_CYCLE");
+  });
+  afterEach(() => {
+    mocks.home.activeExperimentCard = false;
+  });
+
+  it("writes one content-free event of the shared snooze kind, at the app's instant, then goes Home", async () => {
+    await expect(outcome(() => snoozeFirstWeekCardAction(form({ card: "experiment" })))).resolves.toBe("REDIRECT:/");
+
+    expect(mocks.track).toHaveBeenCalledTimes(1);
+    const [, name, payload, at] = mocks.track.mock.calls[0] ?? [];
+    expect(name).toBe(FIRST_WEEK_SNOOZE.event);
+    expect(payload).toEqual({ card: "experiment" });
+    expect(at).toBe(NOW);
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/", "layout");
+    // Hiding a card is not the transition: no summary, no experiment write, no pattern work.
+    expect(mocks.completeFirstWeek).not.toHaveBeenCalled();
+    expect(mocks.skipExperiment).not.toHaveBeenCalled();
+    expect(mocks.loadSummary).not.toHaveBeenCalled();
+    expect(mocks.sync).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it("round-trips: the event it writes hides the card for the rest of the local day when the reader reads it", async () => {
+    mocks.currentInstant.mockReturnValue(new Date("2026-09-17T06:00:00Z"));
+    await outcome(() => snoozeFirstWeekCardAction(form({ card: "experiment" })));
+    const [, , payload, at] = mocks.track.mock.calls[0] ?? [];
+    const events = [{ card: (payload as { card: unknown }).card, occurredAt: at as Date }];
+    const later = new Date("2026-09-17T15:00:00Z"); // 18:00 the same day in Jerusalem
+    expect(experimentCardSnoozed({ events, now: later, timeZone: "Asia/Jerusalem" })).toBe(true);
+    expect(experimentCardSnoozed({ events, now: new Date("2026-09-18T06:00:00Z"), timeZone: "Asia/Jerusalem" })).toBe(false);
+    // It never hides a First Week card.
+    expect(activeSnoozes({ events, now: later })).toEqual({ summary: false, welcomeBack: false });
+  });
+
+  it("reads the card field and no other, and writes nothing about the experiment itself", async () => {
+    const { form: watchedForm, read } = watched(form({ card: "experiment", id: "x", wording: "a sentence", tried: "YES" }));
+    await outcome(() => snoozeFirstWeekCardAction(watchedForm));
+    expect([...new Set(read)]).toEqual(["card"]);
+    expect(mocks.track.mock.calls[0]?.[2]).toEqual({ card: "experiment" });
+  });
+
+  it("with the switch OFF (as shipped) goes Home with ZERO writes", async () => {
+    mocks.home.activeExperimentCard = false;
+    await expect(outcome(() => snoozeFirstWeekCardAction(form({ card: "experiment" })))).resolves.toBe("REDIRECT:/");
+    for (const fn of writes()) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("goes Home with ZERO writes for a person still in the First Week (the card exists only in the weekly cycle)", async () => {
+    mocks.context.current = ready("FIRST_WEEK");
+    await expect(outcome(() => snoozeFirstWeekCardAction(form({ card: "experiment" })))).resolves.toBe("REDIRECT:/");
+    for (const fn of writes()) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it.each(["NEW", "ONBOARDING"])("sends a user in %s to onboarding with ZERO writes", async (state) => {
+    mocks.context.current = ready(state);
+    await expect(outcome(() => snoozeFirstWeekCardAction(form({ card: "experiment" })))).resolves.toBe("REDIRECT:/onboarding");
+    for (const fn of writes()) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("sends a signed-out visitor to sign in, and goes Home when the context cannot be read, with ZERO writes", async () => {
+    mocks.context.current = { kind: "signed_out" };
+    await expect(outcome(() => snoozeFirstWeekCardAction(form({ card: "experiment" })))).resolves.toBe("REDIRECT:/login");
+    mocks.context.current = { kind: "unavailable" };
+    await expect(outcome(() => snoozeFirstWeekCardAction(form({ card: "experiment" })))).resolves.toBe("REDIRECT:/");
+    for (const fn of writes()) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it.each([["Experiment"], ["experiment "], ["experiments"], ["EXPERIMENT"]])("goes Home with ZERO writes for the forged card %j", async (card) => {
+    await expect(outcome(() => snoozeFirstWeekCardAction(form({ card })))).resolves.toBe("REDIRECT:/");
+    for (const fn of writes()) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("the First Week's two cards still need FIRST_WEEK (the weekly cycle does not widen them)", async () => {
+    for (const card of FIRST_WEEK_SNOOZE.cards) {
+      await expect(outcome(() => snoozeFirstWeekCardAction(form({ card })))).resolves.toBe("REDIRECT:/");
+    }
+    for (const fn of writes()) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("never stops the redirect when the event sink fails", async () => {
+    mocks.track.mockRejectedValue(new Error("sink down"));
+    await expect(outcome(() => snoozeFirstWeekCardAction(form({ card: "experiment" })))).resolves.toBe("REDIRECT:/");
   });
 });

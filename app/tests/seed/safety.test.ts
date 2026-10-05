@@ -55,6 +55,19 @@ describe("the tooling reads no secret from a file", () => {
     expect(run).not.toMatch(/log\([^;]*\$\{[^}]*password/i);
   });
 
+  it("the wrapper turns a repeated flag into a list of its values, and only a repeated one", () => {
+    const match = /const put = (\(name, value\) => \{[\s\S]*?\n\});/.exec(text("scripts/seed-demo.mjs"));
+    expect(match).not.toBeNull();
+    const flags: Record<string, unknown> = {};
+    const put = new Function("flags", `return ${match?.[1]};`)(flags) as (name: string, value: unknown) => void;
+    put("exp", "active@9");
+    put("days", "3");
+    expect(flags).toEqual({ exp: "active@9", days: "3" });
+    put("exp", "done@16:helpful");
+    put("exp", true);
+    expect(flags).toEqual({ exp: ["active@9", "done@16:helpful", true], days: "3" });
+  });
+
   it("the live runner's vitest config reads no environment file and keeps the live file out of npm test", () => {
     const config = text("scripts/seed-demo/vitest.config.mts");
     expect(config).toMatch(/envDir:\s*false/);
@@ -76,10 +89,39 @@ describe("the database code touches only the demo user's own tables", () => {
 
   it("reads and writes only these tables", () => {
     const tables = new Set([...db.matchAll(/\.from\("(\w+)"\)/g)].map((m) => m[1]));
-    // `events` is only read (the --explain lines look for the thanked landmarks); weight_entries is written as the demo user.
-    expect([...tables].sort()).toEqual(["events", "meal_entries", "offline_periods", "pattern_evidence", "profiles", "user_preferences", "weight_entries"]);
+    // `events` is only read (the --explain lines look for the thanked landmarks and the snooze); weight_entries is written as the demo user,
+    // and so are the Weekly Learning rows: experiments, the late-evening pattern row and the opened weekly summary.
+    expect([...tables].sort()).toEqual([
+      "events",
+      "experiments",
+      "meal_entries",
+      "offline_periods",
+      "pattern_evidence",
+      "patterns",
+      "profiles",
+      "user_preferences",
+      "weekly_summaries",
+      "weight_entries",
+    ]);
     const events = [...db.matchAll(/\.from\("events"\)\s*\.(\w+)\(/g)].map((m) => m[1]);
-    expect(events).toEqual(["select"]);
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.every((call) => call === "select")).toBe(true);
+  });
+
+  it("writes the Weekly Learning rows only as the demo user, with the insert-or-ignore and the update the app itself uses", () => {
+    const calls = (table: string) => [...db.matchAll(new RegExp(`\\.from\\("${table}"\\)\\s*\\.(\\w+)\\(`, "g"))].map((m) => m[1]);
+    expect(calls("experiments")).toEqual(["upsert"]);
+    expect(calls("weekly_summaries")).toEqual(["upsert", "select"]);
+    expect(calls("patterns")).toEqual(["update", "select"]);
+    // The one remote procedure is the app's own evidence writer; nothing else is called.
+    expect([...db.matchAll(/\.rpc\("(\w+)"/g)].map((m) => m[1])).toEqual(["sync_pattern_evidence"]);
+    // Insert-or-ignore on the primary key or the week: a re-run never overwrites a later press of the person.
+    expect([...db.matchAll(/ignoreDuplicates: true/g)]).toHaveLength(5);
+    expect(db).toContain('onConflict: "user_id,week_start"');
+  });
+
+  it("never changes a rejected pattern: the answer is written only to a row that is not REJECTED (the person's 'not related' is final)", () => {
+    expect(db).toMatch(/\.update\(toPatternAnswerPatch\(answer\)\)\.eq\("id", synced\.data\)\.neq\("status", "REJECTED"\)/);
   });
 
   it("deletes only meals and weights (through RLS) and, with the stack's own admin key, the one guarded user", () => {

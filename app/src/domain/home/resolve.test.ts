@@ -48,6 +48,7 @@ function facts(now: string, overrides: Partial<HomeFacts> = {}): HomeFacts {
     quietHours: null,
     milestone: null,
     weekly: null,
+    activeExperiment: null,
     ...overrides,
   };
 }
@@ -323,6 +324,7 @@ describe("resolveHome: the action", () => {
       quietHours: null,
       milestone: null,
       weekly: null,
+      activeExperiment: null,
     });
     expect(decision).toEqual({ state: { key: "MORNING" }, action: null, degraded: true, weeklyLink: false });
   });
@@ -483,6 +485,7 @@ describe("homeCopyKey", () => {
     [{ key: "MILESTONE_REACHED", week: "2026-10-18", isGoal: false }, "milestoneReached"],
     [{ key: "MILESTONE_REACHED", week: "2026-10-25", isGoal: true }, "milestoneGoalReached"],
     [{ key: "WEEKLY_SUMMARY_READY" }, "weeklyReady"],
+    [{ key: "ACTIVE_EXPERIMENT", experiment: { key: "eat_intentionally", variantId: "default", wording: "A sentence.", locale: "he" } }, "activeExperiment"],
     [{ key: "SILENCE", reason: "NOTHING_TO_SAY" }, "silence"],
     [{ key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "SHABBAT" }, "offlineShabbat"],
     [{ key: "SILENCE", reason: "OFFLINE_PERIOD", periodType: "HOLIDAY" }, "offlineOther"],

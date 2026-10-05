@@ -455,6 +455,8 @@ function evaluate(o: SeedOptions) {
     earlySignal: null,
     quietHours: null,
     milestone: moment,
+    weekly: null,
+    activeExperiment: null,
   });
   return { plan, entries, points, trend, progress, moment, home };
 }
@@ -596,6 +598,7 @@ describe("the --explain lines for the weights", () => {
       selection: null,
       dailyCap: 40,
       weight,
+      weekly: null,
     };
   };
   const text = (facts: ExplainFacts) => formatExplain(facts).join("\n");

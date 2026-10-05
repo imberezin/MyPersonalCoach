@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { USER_A, USER_B, as, createTestDb } from "./harness";
+import { OLD_DATABASE_TIMEOUT_MS, USER_A, USER_B, as, createTestDb } from "./harness";
 
 /**
  * Weekly Learning (migration 20261002130000) on a real Postgres: the three CHECKs (a weekly row belongs to a local Sunday,
@@ -102,8 +102,9 @@ describe("the migration is applied", () => {
       [FN],
     );
     expect(fn).toHaveLength(1);
-    // SECURITY INVOKER, an empty search_path, and a trigger function (so it cannot be called directly).
-    expect(fn[0].prosecdef).toBe(false);
+    // SECURITY DEFINER like audit_changes() (a trigger on the same tables also fires when the auth service deletes the
+    // whole account), an empty search_path, and a trigger function (so it cannot be called directly).
+    expect(fn[0].prosecdef).toBe(true);
     expect(fn[0].config).toEqual(["search_path=\"\""]);
     expect(fn[0].rettype).toBe("trigger");
 
@@ -376,20 +377,48 @@ describe("erasure is safe", () => {
     await db.query("insert into public.profiles (user_id) values ($1) on conflict do nothing", [USER_A]);
   });
 
-  it("deleting the auth user (the account deletion cascade) still works", async () => {
+  it("deleting the auth user (the account deletion cascade) works for a role with no grant on the public tables", async () => {
+    // Supabase deletes a user as supabase_auth_admin, which has no privilege on public.*. The first version of this
+    // migration was SECURITY INVOKER and failed there with "permission denied for table profiles" (found on the real
+    // local stack on 2026-10-05). PGlite runs the cascade's trigger as the table owner, so THIS test cannot reproduce
+    // that failure; what guards it here is the SECURITY DEFINER assertion above, and what proved it is the local stack.
+    await db.exec(`
+      do $$ begin
+        if not exists (select 1 from pg_roles where rolname = 'auth_service_like') then create role auth_service_like nologin; end if;
+      end $$;
+      grant usage on schema auth to auth_service_like;
+      grant select, delete on auth.users to auth_service_like;
+    `);
     await db.query("insert into auth.users (id, email) values ($1, 'c@example.test')", [USER_C]);
     await seedWeek(USER_C, SUNDAY_2);
     await meal(USER_C, "2026-09-22T10:00:00Z");
     await weight(USER_C, "2026-09-22T05:00:00Z");
-    await db.query("delete from auth.users where id = $1", [USER_C]);
+    await db.exec("set role auth_service_like");
+    try {
+      await db.query("delete from auth.users where id = $1", [USER_C]);
+    } finally {
+      await db.exec("reset role");
+    }
     expect(await count("meal_entries", "user_id = $1", [USER_C])).toBe(0);
+    expect(await count("weight_entries", "user_id = $1", [USER_C])).toBe(0);
     expect(await count("weekly_summaries", "user_id = $1", [USER_C])).toBe(0);
+    expect(await count("audit_log", "user_id = $1", [USER_C])).toBe(0);
+  });
+
+  it("nobody but the trigger can execute the function", async () => {
+    // Same as audit_changes(): execute is revoked from public, anon and authenticated (a trigger function cannot be called anyway).
+    for (const role of ["anon", "authenticated"]) {
+      const { rows } = await db.query<{ ok: boolean }>(`select has_function_privilege('${role}', 'public.${FN}()', 'execute') as ok`);
+      expect(rows[0].ok, role).toBe(false);
+    }
   });
 
   it("a trigger function cannot be called directly, by anyone", async () => {
+    // Even the owner gets "trigger functions can only be called as triggers"; the API roles do not get that far, since
+    // execute is revoked from them ("permission denied for function").
     await expect(db.query(`select public.${FN}()`)).rejects.toThrow(/trigger/i);
-    await expect(asA(() => db.query(`select public.${FN}()`))).rejects.toThrow(/trigger/i);
-    await expect(asAnon(() => db.query(`select public.${FN}()`))).rejects.toThrow(/trigger/i);
+    await expect(asA(() => db.query(`select public.${FN}()`))).rejects.toThrow(/permission denied|trigger/i);
+    await expect(asAnon(() => db.query(`select public.${FN}()`))).rejects.toThrow(/permission denied|trigger/i);
   });
 });
 
@@ -443,7 +472,8 @@ describe("the migration is safe on a database that already has rows", () => {
       expect(await tally(old)).toEqual(before);
       expect((await old.query("select 1 from pg_proc where proname = $1", [FN])).rows).toHaveLength(1);
     });
-  });
+    // A second database is built inside the test: under a loaded machine it needs more than the 30 s default.
+  }, OLD_DATABASE_TIMEOUT_MS);
 
   it("the file can be applied again after its objects are dropped, and nothing existing is deleted", async () => {
     await populate(db);

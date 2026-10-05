@@ -16,7 +16,7 @@ const TITLE_ID = "experiment-title";
  * in, otherwise the library's approved sentence of the current language (the person may have switched language
  * since). `tLibrary` is scoped to `interventions`. Pure.
  */
-export function experimentTextFor(open: OpenExperiment, locale: string, tLibrary: Translator): string {
+export function experimentTextFor(open: Pick<OpenExperiment, "key" | "variantId" | "wording" | "locale">, locale: string, tLibrary: Translator): string {
   if (open.locale === locale) return open.wording;
   return tLibrary(`${open.key}.${open.variantId}`, { ...INTERVENTIONS[open.key].params });
 }

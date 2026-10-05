@@ -9,6 +9,7 @@ import { localDayOf, resolveTimeZone, zonedInstantUtc } from "@/domain/time";
 import type { SeedOptions } from "./args";
 import { FOODS, mealTypeOfSlot, type FoodSlot } from "./foods";
 import { buildWeightPlan, type PlannedWeight } from "./weights";
+import { planExperiments, planPatternAnswer, type PlannedExperiment, type PlannedPatternAnswer } from "./weekly";
 
 /**
  * The deterministic history the seed script writes. Pure: no clock, no I/O, no randomness (a small hash of the seed, the
@@ -52,6 +53,10 @@ export interface SeedPlan {
   lateDays: number[];
   /** Ascending by time. Empty unless `--weights` or `--junk-weights` asked for entries (weights.ts). */
   weights: PlannedWeight[];
+  /** In time order. Empty unless `--exp` (or a weekly preset) asked for experiments (weekly.ts). */
+  experiments: PlannedExperiment[];
+  /** null unless `--pattern-answer` asked for one (weekly.ts). */
+  patternAnswer: PlannedPatternAnswer | null;
 }
 
 /** A late-evening meal is placed between these local minutes (21:10 to 23:20), always after the detector's 21:00. */
@@ -258,7 +263,9 @@ export function buildSeedPlan(options: SeedOptions, shabbat: readonly { start: D
     day: m.day,
   }));
   const weights = buildWeightPlan(options, { startedAt, asOf, offline });
-  return { startedAt, asOf, meals: result, offline, lateDays, weights };
+  const experiments = planExperiments(options, startedAt);
+  const patternAnswer = planPatternAnswer(options, result, startedAt);
+  return { startedAt, asOf, meals: result, offline, lateDays, weights, experiments, patternAnswer };
 }
 
 /** The `meal_entries` insert for a planned meal. `user_id` is the column default (the signed-in user); `confirmed_at` is explicit (it is what the First Week counts read). */
@@ -278,12 +285,14 @@ export function toMealRow(meal: PlannedMeal, offlinePeriodId: string | null) {
 const HOUR_MS = 3_600_000;
 
 /**
- * When the First Week ended for a `weekly_cycle` demo user: the earlier of day 15 at 12:00 local and one hour before the
- * clock, never before the First Week began (the profile CHECKs hold either way). null while the First Week is still on.
+ * When the First Week ended for a `weekly_cycle` demo user: with `--transition-day N` (and the weekly presets) 10:00 local on
+ * day N; otherwise the earlier of day 15 at 12:00 local and one hour before the clock, never before the First Week began (the
+ * profile CHECKs hold either way). null while the First Week is still on.
  */
 export function firstWeekEndedAtOf(options: SeedOptions, startedAt: Date): Date | null {
   if (options.lifecycle !== "weekly_cycle") return null;
   const timeZone = resolveTimeZone(options.timeZone);
+  if (options.transitionDay !== null) return eveningOfDay({ startedAt, day: options.transitionDay, time: "10:00", timeZone });
   const dayFifteen = eveningOfDay({ startedAt, day: 15, time: "12:00", timeZone });
   const beforeClock = new Date(resolveAsOf(options, startedAt).getTime() - HOUR_MS);
   const ended = dayFifteen.getTime() <= beforeClock.getTime() ? dayFifteen : beforeClock;
@@ -303,7 +312,7 @@ export function toProfileUpdate(options: SeedOptions, startedAt: Date) {
     lifecycle_state: options.lifecycle === "weekly_cycle" ? "WEEKLY_CYCLE" : "FIRST_WEEK",
     onboarding_step: STEP_IDS[STEP_IDS.length - 1],
     timezone: resolveTimeZone(options.timeZone),
-    observes_shabbat: options.shabbat,
+    observes_shabbat: options.observesShabbat,
     place_key: place.key,
     city: place.cityName,
     latitude: place.latitude,

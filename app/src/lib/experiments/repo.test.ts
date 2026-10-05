@@ -6,6 +6,7 @@ import { createFakeWriteSupabase, type FakeWriteAnswer } from "@/lib/patterns/fa
 import {
   EXPERIMENT_COLUMNS,
   insertOfferedExperiment,
+  loadActiveExperiment,
   loadExperiments,
   skipExperiment,
   startExperiment,
@@ -124,6 +125,69 @@ describe("loadExperiments", () => {
     expect(await loadExperiments(withTable({ select: { error: { code: "42501" } } }).client, USER)).toBeNull();
     expect(await loadExperiments(withTable({ select: "throw" }).client, USER)).toBeNull();
     expect(await loadExperiments(broken, USER)).toBeNull();
+  });
+});
+
+describe("loadActiveExperiment", () => {
+  const active = (over: Record<string, unknown> = {}) => dbRow({ status: "ACTIVE", ...over });
+
+  it("asks for the person's ACTIVE row only: newest first, one row, the same columns", async () => {
+    const { client, queries } = withTable({ select: { rows: [] } });
+    await loadActiveExperiment(client, USER);
+    expect(queries).toEqual([
+      {
+        kind: "query",
+        table: "experiments",
+        op: "select",
+        columns: EXPERIMENT_COLUMNS,
+        filters: [
+          ["eq", "user_id", USER],
+          ["eq", "status", "ACTIVE"],
+        ],
+        order: { column: "created_at", ascending: false },
+        limit: 1,
+      },
+    ]);
+  });
+
+  it("answers the stored sentence of the active row, as stored", async () => {
+    const { client } = withTable({ select: { rows: [active({ wording_source: "ai", wording_locale: "en", wording: "At your next meal, sit down." })] } });
+    expect(await loadActiveExperiment(client, USER)).toEqual({
+      id: EXP_ID,
+      status: "ACTIVE",
+      key: "eat_intentionally",
+      variantId: "default",
+      wording: "At your next meal, sit down.",
+      source: "ai",
+      locale: "en",
+    });
+  });
+
+  it("is null when there is no active row", async () => {
+    expect(await loadActiveExperiment(withTable({ select: { rows: [] } }).client, USER)).toBeNull();
+  });
+
+  it("is null for a row that is not ACTIVE even if the answer carries one (an offer is not an experiment in progress)", async () => {
+    expect(await loadActiveExperiment(withTable({ select: { rows: [dbRow({ status: "OFFERED" })] } }).client, USER)).toBeNull();
+    expect(await loadActiveExperiment(withTable({ select: { rows: [dbRow({ status: "DONE" })] } }).client, USER)).toBeNull();
+  });
+
+  it.each([
+    ["no wording", { wording: null, wording_source: null, wording_locale: null }],
+    ["an empty wording", { wording: "" }],
+    ["an unknown source", { wording_source: "robot" }],
+    ["an unknown language", { wording_locale: "fr" }],
+    ["a key outside the library", { intervention_key: "toString" }],
+    ["no id", { id: "" }],
+  ])("is null for an active row with %s: unknown is no card", async (_name, over) => {
+    expect(await loadActiveExperiment(withTable({ select: { rows: [active(over)] } }).client, USER)).toBeNull();
+  });
+
+  it("is null for an error, a throw and a client that throws, and logs no sentence", async () => {
+    expect(await loadActiveExperiment(withTable({ select: { error: { code: "42501" } } }).client, USER)).toBeNull();
+    expect(await loadActiveExperiment(withTable({ select: "throw" }).client, USER)).toBeNull();
+    expect(await loadActiveExperiment(broken, USER)).toBeNull();
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(TEXT);
   });
 });
 
