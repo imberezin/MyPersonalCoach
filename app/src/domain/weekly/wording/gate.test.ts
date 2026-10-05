@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AI_WORDING } from "../../experiments/wording/constants";
 import { WEEKLY_FLOW, type OpeningMode } from "../types";
 import { WEEKLY_LINE_GATE_REASONS, decideWeeklyLineGate } from "./gate";
@@ -19,7 +19,12 @@ const reasonOf = (input: Input) => {
 };
 
 const originalWording = { ...AI_WORDING };
-const originalFlow = { ...WEEKLY_FLOW };
+// The AI opening line SHIPS OFF (types.test.ts pins that); these tests are about the gate's own rules, so the line is
+// switched on for each of them and put back afterwards.
+const originalFlow = { ...WEEKLY_FLOW, aiLineEnabled: true };
+beforeEach(() => {
+  Object.assign(WEEKLY_FLOW, { aiLineEnabled: true });
+});
 afterEach(() => {
   Object.assign(AI_WORDING, originalWording);
   Object.assign(WEEKLY_FLOW, originalFlow);

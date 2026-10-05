@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { WEEKLY_FLOW } from "@/domain/weekly";
 import { formatExplain, landmarkConfirmedIn, type ExplainFacts, type WeeklyExplain } from "../../scripts/seed-demo/explain";
 import { weeklyExplainOf } from "./weeklyExplainHelpers";
 import { evaluatePreset } from "./weeklyHelpers";
@@ -14,6 +15,17 @@ function linesOf(scenario: string, extra: Record<string, string | number> = {}, 
 }
 
 const weeklyOnly = (lines: string[]) => lines.filter((l) => /^(weekly|shabbat rows|Home weekly)/.test(l));
+
+/** Runs `body` with the AI opening line switched on (it ships OFF), and always puts the shipped value back. */
+function withAiLine(body: () => void): void {
+  const shipped = WEEKLY_FLOW.aiLineEnabled;
+  Object.assign(WEEKLY_FLOW, { aiLineEnabled: true });
+  try {
+    body();
+  } finally {
+    Object.assign(WEEKLY_FLOW, { aiLineEnabled: shipped });
+  }
+}
 
 describe("a learning week (w2-learn)", () => {
   const lines = weeklyOnly(linesOf("w2-learn"));
@@ -37,12 +49,16 @@ describe("a learning week (w2-learn)", () => {
     expect(lines).toContain("weekly weigh-in invitation: shown");
     expect(lines).toContain("weekly experiment: OFFER eat_intentionally / default, origin pattern, rationale PATTERN late_evening_meals");
     expect(lines).toContain("weekly pattern question: due (late_evening_meals)");
-    expect(lines).toContain("weekly opening line gate (same assumption): OPEN");
-    expect(lines).toContain("weekly starter experiments: switched off");
+    // The AI opening line ships OFF (owner, 2026-10-05): the shipped gate says so before anything else.
+    expect(lines).toContain("weekly opening line gate (same assumption): CLOSED (switch_off)");
+    expect(lines).toContain("weekly starter experiments: switched on");
   });
 
-  it("the gate follows --daily-cap like the experiment sentence's", () => {
-    expect(weeklyOnly(linesOf("w2-learn", { "daily-cap": 9 }))).toContain("weekly opening line gate (same assumption): CLOSED (allowance_reserve)");
+  it("with the AI opening line switched on, the gate is open and follows --daily-cap like the experiment sentence's", () => {
+    withAiLine(() => {
+      expect(weeklyOnly(linesOf("w2-learn"))).toContain("weekly opening line gate (same assumption): OPEN");
+      expect(weeklyOnly(linesOf("w2-learn", { "daily-cap": 9 }))).toContain("weekly opening line gate (same assumption): CLOSED (allowance_reserve)");
+    });
   });
 });
 
@@ -51,13 +67,16 @@ describe("the other kinds of week", () => {
     const lines = weeklyOnly(linesOf("w2-celebrate"));
     expect(lines).toContain("weekly mode: CELEBRATE (milestone), opening line celebrateMilestone");
     expect(lines).toContain("weekly weight line: BUILDING; landmark confirmed this week: step 1, the pair 2026-09-20 and 2026-09-27");
-    expect(lines).toContain("weekly opening line gate (same assumption): CLOSED (mode_fixed_text)");
+    // Even with the AI opening line switched on, a CELEBRATE sentence is fixed text and never goes to a provider.
+    withAiLine(() => {
+      expect(weeklyOnly(linesOf("w2-celebrate"))).toContain("weekly opening line gate (same assumption): CLOSED (mode_fixed_text)");
+    });
   });
 
-  it("the goal week names the goal, and the experiment says nothing new to suggest while the starters are off", () => {
+  it("the goal week names the goal, and the experiment is the goal-led starter (the starters ship on)", () => {
     const lines = weeklyOnly(linesOf("w4-goal"));
     expect(lines).toContain("weekly weight line: DOWN; landmark confirmed this week: step 2 (the goal), the pair 2026-09-27 and 2026-10-04");
-    expect(lines).toContain("weekly experiment: NONE (none_eligible)");
+    expect(lines).toContain("weekly experiment: OFFER eat_intentionally / default, origin starter, rationale GOAL improve_eating");
   });
 
   it("a returning week and a quiet week", () => {

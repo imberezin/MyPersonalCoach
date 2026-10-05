@@ -9,10 +9,12 @@ import { experimentWording, firstVariantOf, plannedExperimentId, toExperimentRow
 import { evaluateWeekly, experimentRecordsAt, planWeeklyOpened, toWeeklySummaryRow } from "../../scripts/seed-demo/weeklyEval";
 import { PRESET_ROWS, answeredPreset, evaluatePreset, label, optionsOf, planOf, planOfFresh, readyOf } from "./weeklyHelpers";
 
-// The rows of 15.2 that offer a starter describe the SWITCHED-ON behavior; the shipped value is false (weeklyPlan.shipped.test.ts).
+// The rows of 15.2 that offer a starter describe the SWITCHED-ON behavior, which is also the shipped value (weeklyPlan.shipped.test.ts);
+// the switched-off behavior is pinned in weeklyPlan.startersOff.test.ts.
 vi.mock("@/domain/weekly/types", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/domain/weekly/types")>();
-  return { ...actual, WEEKLY_FLOW: { ...actual.WEEKLY_FLOW, starterExperimentsEnabled: true } };
+  // The table of 15.2 was written with the AI opening line on (its "gate" column), which now ships off: it is switched on here too.
+  return { ...actual, WEEKLY_FLOW: { ...actual.WEEKLY_FLOW, starterExperimentsEnabled: true, aiLineEnabled: true } };
 });
 
 const TZ = "Asia/Jerusalem";

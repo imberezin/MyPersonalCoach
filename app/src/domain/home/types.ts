@@ -32,10 +32,10 @@ export const HOME_FEATURES = {
   firstReportInvitation: true,
   /**
    * A calm Home card for the person's ACTIVE experiment ("Your small experiment"): its stored sentence and one "Thanks" that hides
-   * it for the rest of the local day. Not a report and never a question. SHIPS OFF: false -> the loader makes no query and the
-   * resolver never shows the card (the experiment is still on /week and /progress). Needs the owner's approval of the copy to go on.
+   * it for the rest of the local day. Not a report and never a question. SHIPS ON (owner, 2026-10-05, after seeing the card):
+   * false -> the loader makes no query and the resolver never shows the card (the experiment is still on /week and /progress).
    */
-  activeExperimentCard: false,
+  activeExperimentCard: true,
 } as const;
 
 /**

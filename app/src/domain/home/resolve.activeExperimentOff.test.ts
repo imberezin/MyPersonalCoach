@@ -1,9 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NOT_SNOOZED } from "../firstWeekFlow/types";
-import { HOME_FEATURES, resolveHome, type HomeFacts } from "./index";
 
-// No mock here: this is the SHIPPED value of the switch. The card ships OFF, so a loaded fact changes nothing on Home until the
-// owner approves the copy and the constant is flipped (resolve.activeExperiment.test.ts runs the same facts with it ON).
+// The KILL SWITCH: the card ships ON (resolve.activeExperimentShipped.test.ts pins that), and flipping the constant to false must
+// make a loaded fact change nothing on Home. HOME_FEATURES is a `const`, so the module is mocked.
+vi.mock("./types", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./types")>();
+  return { ...original, HOME_FEATURES: { ...original.HOME_FEATURES, activeExperimentCard: false } };
+});
+
+import { HOME_FEATURES, resolveHome, type HomeFacts } from "./index";
 
 const FACTS: HomeFacts = {
   now: new Date("2027-01-12T10:00:00Z"), // Tuesday 12:00 in Jerusalem
@@ -20,8 +25,8 @@ const FACTS: HomeFacts = {
   activeExperiment: { key: "eat_intentionally", variantId: "default", wording: "A sentence.", locale: "en" },
 };
 
-describe("the active-experiment card switch", () => {
-  it("ships OFF", () => {
+describe("the active-experiment card with the switch off", () => {
+  it("the mock is in effect", () => {
     expect(HOME_FEATURES.activeExperimentCard).toBe(false);
   });
 
@@ -35,10 +40,5 @@ describe("the active-experiment card switch", () => {
     expect(resolveHome({ ...FACTS, now: new Date("2027-01-12T07:00:00Z") }).state.key).toBe("MORNING");
     expect(resolveHome({ ...FACTS, now: new Date("2027-01-12T18:00:00Z") }).state.key).toBe("EVENING");
     expect(resolveHome(FACTS).state).toEqual({ key: "SILENCE", reason: "NOTHING_TO_SAY" });
-  });
-
-  it("is a one-line change: the same facts show the card as soon as the constant is true", () => {
-    // Pinned by resolve.activeExperiment.test.ts ("shows the card at 12:00"), which mocks exactly this one key.
-    expect(Object.keys(HOME_FEATURES)).toContain("activeExperimentCard");
   });
 });

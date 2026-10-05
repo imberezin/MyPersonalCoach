@@ -14,10 +14,17 @@ export const WEEKLY_FLOW = {
   enabled: true,
   /** The inline "does this sound right" question on /week and answerWeeklyPatternAction. */
   patternQuestionEnabled: true,
-  /** Goal-led experiments when no pattern exists. SHIPS OFF until the owner approves their exact sentences (Q2). */
-  starterExperimentsEnabled: false,
-  /** The optional AI opening line. */
-  aiLineEnabled: true,
+  /**
+   * Goal-led experiments when no pattern exists. SHIPS ON (owner, 2026-10-05): both starters (eat_intentionally, then slow_down)
+   * and the neutral frame line that goes with the "today" sentence of slow_down, which is the approved exception to IN_CONTEXT timing.
+   */
+  starterExperimentsEnabled: true,
+  /**
+   * The optional AI opening line. SHIPS OFF (owner, 2026-10-05, on the recommendation): weekly-line-v2 was accepted 20/20
+   * live, but an accepted line is the approved sentence plus one word, at a 4-8 s wait on the Home card press.
+   * The code, the validators and the tests stay; flipping this to true brings the AI line back.
+   */
+  aiLineEnabled: false,
   /** The one weight-trend line, the milestone celebration and the weigh-in invitation. */
   weightLineEnabled: true,
 } as const;

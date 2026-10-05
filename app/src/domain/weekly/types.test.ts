@@ -31,12 +31,12 @@ describe("the weekly constants are tied to the constants they mirror", () => {
 });
 
 describe("the SHIPPED switches and values (a flipped default fails here)", () => {
-  it("ships the goal-led starters OFF and the other four switches ON", () => {
+  it("ships the AI opening line OFF and the other four switches ON (the goal-led starters went ON with the owner's approval, 2026-10-05)", () => {
     expect(WEEKLY_FLOW).toEqual({
       enabled: true,
       patternQuestionEnabled: true,
-      starterExperimentsEnabled: false,
-      aiLineEnabled: true,
+      starterExperimentsEnabled: true,
+      aiLineEnabled: false,
       weightLineEnabled: true,
     });
   });

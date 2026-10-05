@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_WORDING } from "@/domain/experiments/wording/constants";
 import { validateWording } from "@/domain/experiments/wording/validate";
 import { WEEKLY_FLOW, type OpeningMode } from "@/domain/weekly/types";
@@ -13,7 +13,12 @@ import type { AiCallRecord, AIRecorder } from "@/lib/ai/types";
 import { produceWeeklyLineWording, type WeeklyLineDeps, type WeeklyLineInput } from "./word";
 
 const originalWording = { ...AI_WORDING };
-const originalFlow = { ...WEEKLY_FLOW };
+// The AI opening line SHIPS OFF (src/domain/weekly/types.test.ts pins that); these tests are about the wording path
+// itself, so the line is switched on for each of them and put back afterwards.
+const originalFlow = { ...WEEKLY_FLOW, aiLineEnabled: true };
+beforeEach(() => {
+  Object.assign(WEEKLY_FLOW, { aiLineEnabled: true });
+});
 afterEach(() => {
   Object.assign(AI_WORDING, originalWording);
   Object.assign(WEEKLY_FLOW, originalFlow);

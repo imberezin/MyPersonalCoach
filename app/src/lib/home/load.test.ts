@@ -20,6 +20,14 @@ vi.mock("@/domain/weight/types", async (importOriginal) => ({
   WEIGHT_FLOW: weightFlow,
 }));
 
+// These cases are about the base loader (the six queries it has always made), so the active-experiment card, which adds a probe in a
+// WEEKLY_CYCLE, is switched off here. It ships ON; load.activeExperiment.test.ts runs the loader with it on.
+const homeFeatures = vi.hoisted(() => ({ firstReportInvitation: true, activeExperimentCard: false }));
+vi.mock("@/domain/home/types", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/domain/home/types")>()),
+  HOME_FEATURES: homeFeatures,
+}));
+
 const weeklyFlow = vi.hoisted(() => ({ enabled: true, patternQuestionEnabled: true, starterExperimentsEnabled: false, aiLineEnabled: true, weightLineEnabled: true }));
 vi.mock("@/domain/weekly/types", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/domain/weekly/types")>()),
