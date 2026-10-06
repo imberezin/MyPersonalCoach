@@ -17,6 +17,7 @@ export interface LocaleLists<T> {
  * Words that must never appear in product copy (shame, compensation, calories, scores, counting days).
  * Matched as substrings of the lowercase text, like the catalog-wide test in
  * `src/domain/interventions/library.test.ts`, whose inline list is a subset of this one (pinned by `lint.test.ts`).
+ * `src/i18n/messages/copyLint.messages.test.ts` applies the whole list to every text of both catalogs.
  */
 export const COPY_LINT_WORDS: LocaleLists<string> = {
   he: [

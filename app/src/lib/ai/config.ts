@@ -19,7 +19,8 @@ export interface AiConfig {
 }
 
 export const AI_DEFAULTS = {
-  // PLACEHOLDERS until the Hebrew bake-off picks the winner (Technology Stack 11.3). Provider model lifecycles are short:
+  // Chosen by the Hebrew text bake-off of 2026-10-01 (Technology Stack 11.3); the 20-photo run was declared not required on
+  // 2026-10-05. Provider model lifecycles are short:
   // gemini-3.1-flash-lite has a published shutdown date (2027-05-07) and the Groq model is a Preview model.
   models: { gemini: "gemini-3.1-flash-lite", groq: "qwen/qwen3.8-27b" },
   providerOrder: ["gemini", "groq"] as readonly AiProviderId[],

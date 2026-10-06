@@ -157,7 +157,7 @@ function resolveState(facts: HomeFacts, timeZone: string): HomeState {
 
   // The active experiment, re-readable. A calm, optional card (no question, no report), so it is the last proactive card: it yields to
   // everything above (the Shabbat and offline states, the weekly card, the First Week cards, the landmark and the Early Signal: one
-  // proactive card at a time) and replaces the clock sentences below it. Behind its own switch (shipped OFF). It needs lifecycle
+  // proactive card at a time) and replaces the clock sentences below it. Behind its own switch (ON, owner 2026-10-05). It needs lifecycle
   // WEEKLY_CYCLE and a loaded fact (the loader already applied "Thanks" for today), and, like the Early Signal, KNOWN quiet hours
   // and a clock outside them: never in quiet hours, and an unknown preference is better silent than intrusive. It is disjoint from
   // B1 below by construction (WEEKLY_CYCLE vs FIRST_WEEK). (`?? null`: the resolver is total, so a caller that predates this fact

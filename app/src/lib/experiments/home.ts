@@ -10,7 +10,7 @@ import { loadActiveExperiment } from "./repo";
  * and nothing calls the AI. Never throws: any error, throw or malformed answer is `null` (unknown = no card; Home stays calm and
  * its `degraded` note is not set). The caller reads this only for the WEEKLY_CYCLE lifecycle.
  *
- *  0. the switch (HOME_FEATURES.activeExperimentCard, shipped OFF): off is null with ZERO queries.
+ *  0. the switch (HOME_FEATURES.activeExperimentCard, ON since the owner's decision of 2026-10-05): when off, this is null with ZERO queries.
  *  1. one `limit 1` read of the ACTIVE row (loadActiveExperiment). No active experiment, or an unreadable one, is null and the
  *     snooze is not even read: most people pay one query.
  *  2. one read of the "Thanks" events since the start of the person's LOCAL day, newest first, at most

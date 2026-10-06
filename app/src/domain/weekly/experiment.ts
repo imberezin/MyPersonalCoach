@@ -40,8 +40,8 @@ export type WeeklyExperimentDecision =
 
 /**
  * The editorial starter ladder: SMALLEST BEHAVIOURAL STEP FIRST (a first small success matters more than a theoretical
- * optimum). It is an owner-approvable prior, NOT evidence, and the whole starter path SHIPS OFF
- * (`WEEKLY_FLOW.starterExperimentsEnabled` is false) until the owner approves the exact sentences (Q2). It is an
+ * optimum). It is an owner-approved prior, NOT evidence, and the whole starter path is ON
+ * (`WEEKLY_FLOW.starterExperimentsEnabled` is true) since the owner approved the exact sentences on 2026-10-05 (Q2). It is an
  * OWNER-APPROVED EXCEPTION to the library's `timing: ["IN_CONTEXT"]`: a weekly, self-chosen habit experiment shown on a page
  * the person opened, not an in-the-moment nudge; INTERVENTIONS.md lists it as such. Every entry names an existing library key
  * and variant with: mode NORMAL, asksOutcome true, a context list that includes HABIT or ENVIRONMENT, an eating phase of ANY

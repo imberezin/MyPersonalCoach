@@ -818,14 +818,14 @@ Later (large)           only if required: queues, workers, service separation, d
 
 **Resolved on 2026-10-01:** login method (email + password, sign-ups disabled); `@hebcal/core` server-side only; "available day" rule (less than 50% offline); timing of "השבוע שלך"; the owner's own data may use Gemini's free tier.
 
-**Still open:**
+**Still open** (checked against the code and the live project on 2026-10-06; items 1, 3 and 4 are settled and stay in the list, struck through, so the numbers that other documents use do not change):
 
-1. **Primary AI provider:** run the Hebrew bake-off and pick Gemini or Groq; confirm Groq's image-plus-schema support and Israel availability.
+1. ~~**Primary AI provider:** run the Hebrew bake-off and pick Gemini or Groq; confirm Groq's image-plus-schema support and Israel availability.~~ **Settled:** `gemini-3.1-flash-lite` first and Groq `qwen/qwen3.8-27b` second, chosen by the Hebrew text bake-off of 2026-10-01; the 20-photo run was declared not required on 2026-10-05. Groq answered a real live report as the fallback. Still unverified: Groq with an image plus `json_schema` (the code runs Groq in `json_object`, the mode documented to work with an image).
 2. **Voice provider:** choose after a short Hebrew accuracy test; check Groq Hebrew support.
-3. **Scheduler:** confirm `pg_cron` works on the Supabase Free plan when the project is created; otherwise use Cloudflare Workers cron.
-4. **Candle-lighting minutes:** per-city default plus a user-confirmed value at onboarding.
+3. ~~**Scheduler:** confirm `pg_cron` works on the Supabase Free plan when the project is created; otherwise use Cloudflare Workers cron.~~ **Settled (2026-10-01):** `pg_cron` and `pg_net` work on the Free plan; `engine-tick` runs every 5 minutes and `shabbat-topup` twice a week. No Cloudflare Workers cron is needed.
+4. ~~**Candle-lighting minutes:** per-city default plus a user-confirmed value at onboarding.~~ **Settled:** every one of the 57 built-in places has a default, and the person confirms the minutes in onboarding step A9.
 5. **Backups:** where to store the weekly database dump.
-6. **Large photo batches:** verify host request-size limits for the in-memory photo path.
+6. **Large photo batches:** verify host request-size limits for the in-memory photo path. **Update 2026-10-06:** a single photo is settled (compressed on the phone to at most 700 KB, refused by the server above 1 MB, and a real camera photo worked on 2026-10-02); what remains is the Shabbat batch path, which is not built.
 7. **Supabase pausing:** whether `pg_cron`-only activity counts as activity (unverified); daily app use is assumed.
 8. **Multiple users later:** their data must not use Gemini's free tier; gendered copy, per-user language, privacy policy and legal review for health-adjacent data.
 9. **Vercel Hobby terms** if anyone pays for the product or contributes financially.

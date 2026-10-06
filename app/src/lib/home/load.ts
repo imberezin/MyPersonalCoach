@@ -70,7 +70,7 @@ export async function loadHomeFacts(context: OnboardingContext, now: Date = new 
       // Weekly Learning: WEEKLY_CYCLE only, and the loader itself makes no query outside the card window (Sunday 05:00 to
       // Wednesday 05:00). null = nothing to show, or unknown: it never changes any other fact and never sets `degraded`.
       inWeeklyCycle && WEEKLY_FLOW.enabled ? loadWeeklyHomeFact(supabase, userId, { timeZone, now }) : Promise.resolve(null),
-      // The active-experiment card: WEEKLY_CYCLE only and behind its own switch (shipped OFF = zero queries). At most one `limit 1`
+      // The active-experiment card: WEEKLY_CYCLE only and behind its own switch (ON since 2026-10-05; when off, zero queries). At most one `limit 1`
       // read for a person with no active experiment. null = none, snoozed today, or unknown; never sets `degraded`.
       inWeeklyCycle && HOME_FEATURES.activeExperimentCard ? loadActiveExperimentCard(supabase, userId, { timeZone, now }) : Promise.resolve(null),
     ]);
