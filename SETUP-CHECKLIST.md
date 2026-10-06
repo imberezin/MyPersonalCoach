@@ -78,6 +78,8 @@ delete from public.push_subscriptions where user_id = (select id from auth.users
 
 ## 2. Supabase (חינם)
 
+> **סטטוס (2026-10-06):** בוצע ב-2026-10-01. המיגרציות הורצו במסד המארח בהדרגה, עד 2026-10-05, וכל עשר המיגרציות הוחלו.
+
 1. היכנס ל-[supabase.com](https://supabase.com), צור פרויקט חדש בתוכנית **Free**, ובחר אזור קרוב אליך. שמור את סיסמת בסיס הנתונים.
 2. בפרויקט: **Project Settings → API**. העתק את שלושת הערכים: **Project URL**, **Publishable key** ו-**Secret key**.
 3. צור את קובץ ההגדרות המקומי:
@@ -93,11 +95,13 @@ Copy-Item .env.example .env.local
 5. הרץ את סכמת בסיס הנתונים: ב-Supabase פתח **SQL Editor**, והרץ **כל** קובץ בתיקייה `app\supabase\migrations\` לפי הסדר (לפי שם הקובץ, מהישן לחדש): הדבק את כל התוכן של קובץ אחד, הרץ, וחזור על זה עם הבא. לא מספיק `20261001000000_init.sql` לבדו.
 6. צור את המשתמש שלך: **Authentication → Users → Add user**. אימייל וסיסמה, וסמן אישור אוטומטי של המשתמש.
 7. כבה הרשמה ציבורית (ההגדרה שמאפשרת למשתמשים חדשים להירשם), כדי שאף אחד אחר לא יוכל ליצור חשבון. **אל תכבה את ספק ה-Email עצמו**: אז גם הכניסה שלך נחסמת ("Email logins are disabled"). זו בדיוק הטעות שנתפסה בהרצה המקומית.
-8. הפעל את `pg_cron` ו-`pg_net`: **Database → Extensions**. אם אחד מהם לא זמין בתוכנית Free, תגיד לי ונעבור ל-Cloudflare Workers cron.
+8. הפעל את `pg_cron` ו-`pg_net`: **Database → Extensions**. אם אחד מהם לא זמין בתוכנית Free, תגיד לי ונעבור ל-Cloudflare Workers cron. (עודכן 2026-10-06: שתי התוספות זמינות ופועלות בתוכנית Free, אומת ב-2026-10-01, ואין צורך ב-Cloudflare Workers cron.)
 
 הפעל מחדש את `npm run dev`. עכשיו `http://localhost:3000` מעביר למסך הכניסה, ואתה נכנס עם המשתמש שיצרת.
 
 ## 3. סודות נוספים
+
+> **סטטוס (2026-10-06):** בוצע ב-2026-10-01: `CRON_SECRET` ומפתחות VAPID הוגדרו ב-Vercel, והם עובדים (קריאת ה-cron מתקבלת באתר, והתראת בדיקה הגיעה לאייפון).
 
 סוד לנתיב ה-Cron:
 
@@ -113,7 +117,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 npx web-push generate-vapid-keys
 ```
 
-העתק את שני המפתחות ל-`NEXT_PUBLIC_VAPID_PUBLIC_KEY` ו-`VAPID_PRIVATE_KEY`, ובשדה `VAPID_SUBJECT` רשום `mailto:` ואחריו האימייל שלך.
+העתק את שני המפתחות ל-`NEXT_PUBLIC_VAPID_PUBLIC_KEY` ו-`VAPID_PRIVATE_KEY`, ובשדה `VAPID_SUBJECT` רשום `mailto:` ואחריו האימייל שלך. (עודכן 2026-10-06: בפרודקשן ערך `VAPID_SUBJECT` הוא כתובת האתר, `https://my-personal-coach-delta.vercel.app`; גם `mailto:` מותר.)
 
 ## 4. GitHub
 
@@ -123,12 +127,16 @@ npx web-push generate-vapid-keys
 
 ## 5. Vercel (חינם, שימוש אישי)
 
+> **סטטוס (2026-10-06):** בוצע ב-2026-10-01. האתר באוויר: https://my-personal-coach-delta.vercel.app.
+
 1. ב-[vercel.com](https://vercel.com): **Add New → Project**, וייבא את ה-repo.
 2. **Root Directory**: `app`.
 3. **Environment Variables**: אותם ערכים כמו ב-`.env.local` (כולל `SUPABASE_SECRET_KEY`, `CRON_SECRET`, ומפתחות ה-VAPID).
 4. Deploy.
 
 ## 6. תזמון ה-Behavior Engine
+
+> **סטטוס (2026-10-06):** בוצע ב-2026-10-01. התזמון `engine-tick` רץ כל 5 דקות, והסוד נקרא מה-Vault בזמן הריצה ולא נכתב בטקסט הפקודה. הדוגמה למטה היא בדיקה ידנית של הנתיב בלבד.
 
 אחרי שהאתר באוויר, ב-Supabase **SQL Editor** (החלף את הכתובת ואת הסוד):
 
@@ -151,6 +159,8 @@ curl.exe -X POST https://YOUR-APP.vercel.app/api/engine/tick -H "Authorization: 
 התשובה הצפויה: `{"ok":true,...}`. בלי ה-header התשובה היא 401.
 
 ## 6ב. תזמון: שבתות עתידיות (ראשון ורביעי)
+
+> **סטטוס (2026-10-06):** שלבים 1–5 בוצעו ב-2026-10-02, והריצה השבועית הראשונה הצליחה ב-2026-10-04. בדיקת הבריאות בסוף הסעיף נשארת קבועה (ב-1 בכל חודש ואחרי כל פריסה שנוגעת בנתיב).
 
 ה-Onboarding כותב 8 שבתות קדימה. הנתיב `/api/engine/shabbat-topup` מוסיף את החסרות לכל משתמש שמקיים שבת (לפי המקום שלו), כך שתמיד יש 8 קדימה. בלעדיו Home מפסיק לזהות שבת בערך ב-2026-11-26. הוא רק מוסיף שורות `SHABBAT` מסוג `auto` שמתחילות בעתיד; הוא לא נוגע בדיווחים, בשורות ידניות, בשורות עבר או בנתונים אישיים אחרים, והתשובה והלוגים שלו כוללים מספרים בלבד.
 
@@ -235,4 +245,4 @@ select status_code, created from net._http_response order by created desc limit 
 
 - **"צריך להשלים הגדרה"** אחרי שמילאת את `.env.local`: הפעל מחדש את `npm run dev`. משתני סביבה נקראים רק בהפעלה.
 - **אין התחברות:** ודא שיצרת את המשתמש בשלב 2.6 ושסימנת אישור אוטומטי.
-- **הדפדפן לא מציג התראות באייפון:** צריך קודם "הוסף למסך הבית". המסך שמסביר את זה ייבנה עם ה-Onboarding.
+- **הדפדפן לא מציג התראות באייפון:** צריך קודם "הוסף למסך הבית". המסך שמסביר את זה נבנה (A11, מסך ההתראות ב-Onboarding), והדרך באייפון, מהוספה למסך הבית ועד התראת בדיקה, אומתה באייפון אמיתי ב-2026-10-01.
