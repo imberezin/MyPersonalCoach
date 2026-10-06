@@ -21,8 +21,8 @@ export const IMAGE_LIMITS = {
  */
 export const PHOTO_CROP = {
   enabled: true,
-  /** The smallest side of the frame, as a share of the picture's side (about 6.7 times zoom at most). */
-  minFraction: 0.15,
+  /** The smallest side of the frame, as a share of the picture's side (5 times zoom at most, and two corner targets never cover each other completely). */
+  minFraction: 0.2,
   /** One arrow-key press moves an edge by this share of the picture. */
   keyboardStep: 0.02,
   /** A frame within this share of the whole picture counts as "not cropped": the prepared photo is sent as it is. */

@@ -36,6 +36,10 @@ describe.each(LOCALES)("LoginForm password field in %s", (locale) => {
   const input = html.match(/<input\b[^>]*name="password"[^>]*>/)?.[0] ?? "";
   const button = html.match(/<button\b[^>]*aria-controls="[^"]*"[^>]*>/)?.[0] ?? "";
 
+  it("is read left to right whatever the page direction, so a symbol at its end stays at its end when it is shown", () => {
+    expect(input).toContain('dir="ltr"');
+  });
+
   it("starts hidden, and keeps the browser's own password help", () => {
     expect(input).toContain('type="password"');
     expect(input).toContain('autoComplete="current-password"');

@@ -100,6 +100,28 @@ export function nudgeCrop(
   return dragCrop(rect, handle, dx, dy, min);
 }
 
+/** The modifier keys of a keyboard event, so the rule below can be tested without one. */
+export interface KeyModifiers {
+  shiftKey?: boolean;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+}
+
+const CROP_KEYS: readonly string[] = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+
+/**
+ * What a key press on a handle does, or `null` when it is not the frame's business and must be left to the browser: any key
+ * but an arrow, and an arrow with Alt, Ctrl or Cmd (Alt+Left is the browser's Back). Shift makes the step five times bigger,
+ * so a frame can be brought across the picture without sixty presses.
+ */
+export function nudgeFromKey(rect: CropRect, handle: CropHandle, key: string, modifiers: KeyModifiers = {}): CropRect | null {
+  if (!CROP_KEYS.includes(key)) return null;
+  if (modifiers.altKey || modifiers.ctrlKey || modifiers.metaKey) return null;
+  const step = modifiers.shiftKey ? PHOTO_CROP.keyboardStep * 5 : PHOTO_CROP.keyboardStep;
+  return nudgeCrop(rect, handle, key as CropKey, step);
+}
+
 /** The frame covers the whole picture (within `epsilon`): nothing to cut, the prepared photo goes as it is. */
 export function isFullCrop(rect: CropRect, epsilon: number = PHOTO_CROP.fullEpsilon): boolean {
   return rect.x <= epsilon && rect.y <= epsilon && rect.x + rect.w >= 1 - epsilon && rect.y + rect.h >= 1 - epsilon;

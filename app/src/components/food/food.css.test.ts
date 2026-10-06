@@ -193,6 +193,12 @@ describe("food.module.css", () => {
     expect(grid.match(/linear-gradient\(/g) ?? []).toHaveLength(4);
   });
 
+  it("shows the keyboard ring on a corner in white with a dark ring outside it, so it reads on any photo", () => {
+    const ring = ruleFor(".cropHandle:focus-visible")?.body ?? "";
+    expect(ring).toMatch(/outline\s*:\s*2px solid var\(--color-surface\)/);
+    expect(ring).toMatch(/box-shadow\s*:\s*0 0 0 4px color-mix\(in srgb, var\(--color-text-primary\)/);
+  });
+
   it("marks the middle of each side with a short bar", () => {
     expect(ruleFor(".cropEdgeH::after,\n.cropEdgeV::after")?.body).toMatch(/background\s*:\s*var\(--color-surface\)/);
     expect(ruleFor(".cropEdgeH::after")?.body).toMatch(/inline-size\s*:\s*1\.75rem/);

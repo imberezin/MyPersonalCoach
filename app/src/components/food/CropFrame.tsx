@@ -7,14 +7,11 @@ import {
   CROP_EDGES,
   dragCrop,
   isFullCrop,
-  nudgeCrop,
+  nudgeFromKey,
   type CropHandle,
-  type CropKey,
   type CropRect,
 } from "@/domain/food/crop";
 import styles from "./food.module.css";
-
-const ARROW_KEYS: readonly string[] = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
 
 /** What one drag remembers: where it started and how big the picture was, so the frame is a pure function of both. */
 interface Drag {
@@ -118,9 +115,12 @@ export function CropFrame({ aspect, crop, onChange, interactive, hintId, childre
 
   function onKeyDown(handle: CropHandle) {
     return (event: KeyboardEvent<HTMLElement>) => {
-      if (!interactive || !ARROW_KEYS.includes(event.key)) return;
+      if (!interactive) return;
+      // Only an arrow without Alt, Ctrl or Cmd is the frame's: the rest (Tab, Alt+Left as Back) is left to the browser.
+      const next = nudgeFromKey(crop, handle, event.key, event);
+      if (!next) return;
       event.preventDefault();
-      onChange(nudgeCrop(crop, handle, event.key as CropKey));
+      onChange(next);
     };
   }
 

@@ -288,6 +288,13 @@
   cursor: pointer;
 }
 
+/* The keyboard ring: white with a dark ring outside it, so it shows on a pale photo as well as on a dark one (the page ring is one color). */
+.cropHandle:focus-visible {
+  outline: 2px solid var(--color-surface);
+  outline-offset: 0;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-text-primary) 70%, transparent);
+}
+
 .cropHandle::after {
   content: "";
   position: absolute;

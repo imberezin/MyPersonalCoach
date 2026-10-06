@@ -32,8 +32,21 @@ describe("login.module.css", () => {
     expect(reveal).toMatch(/inset-inline-end\s*:\s*0/);
     expect(reveal).toMatch(/inline-size\s*:\s*var\(--tap-target\)/);
     expect(body(".passwordBox")).toMatch(/position\s*:\s*relative/);
-    // The text of the password stops before the button.
-    expect(body(".passwordBox input")).toMatch(/padding-inline-end\s*:\s*var\(--tap-target\)/);
+    // The password is read left to right but the button is at the end of the PAGE's line, so room is kept on BOTH sides:
+    // the text never runs under the button, whichever side it is on.
+    expect(body(".passwordBox input")).toMatch(/padding-inline\s*:\s*var\(--tap-target\)/);
+  });
+
+  it("lets the password box's padding win over the general field padding (it comes later, with the same weight)", () => {
+    const general = css.indexOf(".field input {");
+    const password = css.indexOf(".passwordBox input {");
+    expect(general).toBeGreaterThan(-1);
+    expect(password).toBeGreaterThan(general);
+  });
+
+  it("hides the browser's own reveal button in Edge, so there are not two eyes", () => {
+    const rule = body(".passwordBox input::-ms-reveal,\n.passwordBox input::-ms-clear");
+    expect(rule).toMatch(/display\s*:\s*none/);
   });
 
   it("draws the icon in the button's own color, with a token, and no color of its own", () => {

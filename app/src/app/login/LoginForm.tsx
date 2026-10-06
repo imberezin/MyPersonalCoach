@@ -47,6 +47,9 @@ export function LoginForm() {
           <input
             id={PASSWORD_ID}
             name="password"
+            // A password is always read left to right, also on a Hebrew page: when it is shown, a "!" at its end must stay at
+            // its end (in a right-to-left field the bidirectional rules would move it to the other side).
+            dir="ltr"
             type={password.inputType}
             autoComplete="current-password"
             autoCapitalize="off"

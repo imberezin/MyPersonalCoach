@@ -16,6 +16,7 @@ import { ProcessingPanel } from "./ProcessingPanel";
 import { createAbortScope } from "./client/abortScope";
 import { prepareImage } from "./client/prepareImage";
 import { initialPhotoState, photoReducer } from "./client/photoReducer";
+import { photoRequestKey } from "./client/photoRequest";
 import { createRequestIds } from "./client/requestId";
 import { sendAnalyze } from "./client/sendAnalyze";
 import styles from "./food.module.css";
@@ -26,6 +27,19 @@ const HELP_ID = "photo-camera-help";
 const CROP_HINT_ID = "photo-crop-hint";
 /** After this long the processing panel adds its extra, calm line. */
 const SLOW_AFTER_MS = 8_000;
+
+/**
+ * The picture for a real crop: cut from the ORIGINAL file, so the chosen part gets all the pixels. When the original cannot
+ * be decoded a second time (the browser let go of it, or there is no memory for a second large picture), the same frame is
+ * cut from the preview that is already in memory: smaller, but upright and certain, and still the part the person chose.
+ */
+async function cutFrame(original: Blob, preview: Blob, frame: CropRect): Promise<Blob> {
+  try {
+    return (await prepareImage(original, {}, { crop: frame })).blob;
+  } catch {
+    return (await prepareImage(preview, {}, { crop: frame })).blob;
+  }
+}
 
 interface PreparedPhoto {
   blob: Blob;
@@ -75,6 +89,10 @@ export function PhotoReport() {
   const original = useRef<File | null>(null);
   /** The last cropped picture, for this photo and this frame, so a retry or a second Send re-uses it. */
   const cropped = useRef<{ seq: number; key: string; blob: Blob } | null>(null);
+  /** The cut that is running now, so a second Send for the same photo and frame waits for it instead of decoding again. */
+  const cutting = useRef<{ seq: number; key: string; promise: Promise<Blob> } | null>(null);
+  /** The reset button disappears when it is pressed: the focus goes to Send, so a keyboard user is not left on nothing. */
+  const focusAfterReset = useRef(false);
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusSendNext = useRef(false);
 
@@ -108,6 +126,14 @@ export function PhotoReport() {
     }
   }, [state.phase]);
 
+  // After "Whole photo" the button that had the focus is gone; the focus goes to the Send button.
+  useEffect(() => {
+    if (focusAfterReset.current && isFullCrop(crop)) {
+      focusAfterReset.current = false;
+      actions.current?.querySelector("button")?.focus();
+    }
+  }, [crop]);
+
   async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
     const file = input.files?.[0];
@@ -118,6 +144,7 @@ export function PhotoReport() {
     // A new photo starts with the whole picture, and nothing cropped from an earlier one can be sent for it.
     original.current = file;
     cropped.current = null;
+    cutting.current = null;
     setCrop(FULL_CROP);
     setPhoto(null);
     setCancelled(false);
@@ -134,18 +161,30 @@ export function PhotoReport() {
 
   /**
    * The picture to send: the prepared photo as it is when the frame is the whole picture (no second re-encode), otherwise
-   * the chosen part cut from the original. The cut is remembered for this photo and this frame.
+   * the chosen part cut from the original. The cut is remembered for this photo and this frame, and a cut that is still
+   * running is shared, so Send, Cancel, Send never decodes a large picture twice at once. A result is remembered only if the
+   * photo on the screen is still the one it was cut from.
    */
-  async function pictureFor(current: PreparedPhoto, frame: CropRect): Promise<Blob> {
-    if (!PHOTO_CROP.enabled || isFullCrop(frame)) return current.blob;
+  function pictureFor(current: PreparedPhoto, frame: CropRect): Promise<Blob> {
+    if (!PHOTO_CROP.enabled || isFullCrop(frame)) return Promise.resolve(current.blob);
     const key = cropKey(frame);
+    const seq = photoSeq.current;
     const known = cropped.current;
-    if (known && known.seq === photoSeq.current && known.key === key) return known.blob;
+    if (known && known.seq === seq && known.key === key) return Promise.resolve(known.blob);
+    const running = cutting.current;
+    if (running && running.seq === seq && running.key === key) return running.promise;
     const source = original.current;
-    if (!source) return current.blob;
-    const prepared = await prepareImage(source, {}, { crop: frame });
-    cropped.current = { seq: photoSeq.current, key, blob: prepared.blob };
-    return prepared.blob;
+    if (!source) return Promise.resolve(current.blob);
+    const promise = cutFrame(source, current.blob, frame)
+      .then((blob) => {
+        if (photoSeq.current === seq && original.current === source) cropped.current = { seq, key, blob };
+        return blob;
+      })
+      .finally(() => {
+        if (cutting.current?.promise === promise) cutting.current = null;
+      });
+    cutting.current = { seq, key, promise };
+    return promise;
   }
 
   async function submit(current: PreparedPhoto) {
@@ -176,7 +215,7 @@ export function PhotoReport() {
       mode: "photo",
       text,
       // A different frame is a different picture, so it is a different request; the same frame and note keep the same id.
-      requestId: requestIds.idFor("photo", `photo:${photoSeq.current}:${cropKey(frame)}:${text}`),
+      requestId: requestIds.idFor("photo", photoRequestKey(photoSeq.current, frame, text)),
       composedMs: Math.max(0, Math.round(Date.now() - mountedAt.current)),
     };
     const result = await sendAnalyze({ fields, image: picture }, { signal });
@@ -221,6 +260,7 @@ export function PhotoReport() {
   function differentPhoto() {
     original.current = null;
     cropped.current = null;
+    cutting.current = null;
     setCrop(FULL_CROP);
     setPhoto(null);
     setCancelled(false);
@@ -323,13 +363,21 @@ export function PhotoReport() {
               <PreviewImage photo={photo} alt={t("photo.previewAlt")} />
             )}
           </div>
-          {PHOTO_CROP.enabled ? (
+          {/* The words about the frame are for the moment it can be moved: not while a problem panel is showing. */}
+          {PHOTO_CROP.enabled && state.phase === "ready" ? (
             <div className={styles.cropInfo}>
               <p id={CROP_HINT_ID} className={styles.hint} aria-live="polite">
                 {isFullCrop(crop) ? t("photo.cropHint") : t("photo.cropActive")}
               </p>
-              {!isFullCrop(crop) && state.phase === "ready" ? (
-                <Button type="button" variant="tertiary" onClick={() => setCrop(FULL_CROP)}>
+              {!isFullCrop(crop) ? (
+                <Button
+                  type="button"
+                  variant="tertiary"
+                  onClick={() => {
+                    focusAfterReset.current = true;
+                    setCrop(FULL_CROP);
+                  }}
+                >
                   {t("photo.cropReset")}
                 </Button>
               ) : null}

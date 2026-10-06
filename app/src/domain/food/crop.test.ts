@@ -9,6 +9,7 @@ import {
   dragCrop,
   isFullCrop,
   nudgeCrop,
+  nudgeFromKey,
   type CropHandle,
   type CropRect,
 } from "./crop";
@@ -22,7 +23,7 @@ const inside = (rect: CropRect) => rect.x >= 0 && rect.y >= 0 && right(rect) <= 
 describe("PHOTO_CROP", () => {
   it("ships on, with a frame that cannot shrink to a speck and a small keyboard step", () => {
     expect(PHOTO_CROP.enabled).toBe(true);
-    expect(PHOTO_CROP.minFraction).toBe(0.15);
+    expect(PHOTO_CROP.minFraction).toBe(0.2);
     expect(PHOTO_CROP.keyboardStep).toBe(0.02);
     expect(PHOTO_CROP.fullEpsilon).toBeLessThan(0.01);
   });
@@ -85,7 +86,7 @@ describe("dragCrop", () => {
     const squeezed = dragCrop(frame, "se", -5, -5);
     expect(squeezed).toEqual({ x: 0.2, y: 0.2, w: MIN, h: MIN });
     const fromTop = dragCrop(frame, "nw", 5, 5);
-    expect(fromTop).toEqual({ x: 0.55, y: 0.55, w: MIN, h: MIN });
+    expect(fromTop).toEqual({ x: 0.5, y: 0.5, w: MIN, h: MIN });
     expect(right(fromTop)).toBe(0.7);
   });
 
@@ -146,6 +147,28 @@ describe("nudgeCrop (the keyboard)", () => {
   });
 });
 
+describe("nudgeFromKey (what a key press on a handle does)", () => {
+  const frame: CropRect = { x: 0.2, y: 0.2, w: 0.5, h: 0.5 };
+
+  it("moves the handle by the step for an arrow key", () => {
+    expect(nudgeFromKey(frame, "e", "ArrowRight")).toEqual({ x: 0.2, y: 0.2, w: 0.52, h: 0.5 });
+  });
+
+  it("moves five times as far with Shift", () => {
+    expect(nudgeFromKey(frame, "e", "ArrowRight", { shiftKey: true })).toEqual({ x: 0.2, y: 0.2, w: 0.6, h: 0.5 });
+  });
+
+  it("leaves every other key to the browser", () => {
+    for (const key of ["Tab", "Enter", " ", "Escape", "a", "Home", "PageDown"]) expect(nudgeFromKey(frame, "se", key), key).toBeNull();
+  });
+
+  it("leaves an arrow with Alt, Ctrl or Cmd to the browser (Alt+Left is Back)", () => {
+    for (const modifiers of [{ altKey: true }, { ctrlKey: true }, { metaKey: true }, { altKey: true, shiftKey: true }]) {
+      expect(nudgeFromKey(frame, "se", "ArrowLeft", modifiers), JSON.stringify(modifiers)).toBeNull();
+    }
+  });
+});
+
 describe("isFullCrop and cropKey", () => {
   it("knows the whole picture, also with a hair of difference", () => {
     expect(isFullCrop(FULL_CROP)).toBe(true);
@@ -199,6 +222,12 @@ describe("cropSourceRect", () => {
       expect(out.sx + out.sw).toBeLessThanOrEqual(640);
       expect(out.sy + out.sh).toBeLessThanOrEqual(480);
     }
+  });
+
+  it("rounds each edge on its own and takes the difference (a pinned example, in a portrait photo)", () => {
+    // x 0.1234 of 3024 = 373.1 -> 373; right edge 0.5555 of 3024 = 1679.9 -> 1680, so the width is 1307.
+    // y 0.5678 of 4032 = 2289.4 -> 2289; bottom edge 0.9011 of 4032 = 3633.2 -> 3633, so the height is 1344.
+    expect(cropSourceRect({ x: 0.1234, y: 0.5678, w: 0.4321, h: 0.3333 }, 3024, 4032)).toEqual({ sx: 373, sy: 2289, sw: 1307, sh: 1344 });
   });
 
   it("copes with a picture of one pixel", () => {

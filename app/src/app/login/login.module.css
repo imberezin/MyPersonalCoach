@@ -57,14 +57,22 @@
 }
 
 /* The password field: the input and the show/hide button share one box. The button sits at the END of the line (the left in
-   Hebrew, the right in English) and the text never runs under it. */
+   Hebrew, the right in English). */
 .passwordBox {
   position: relative;
   display: grid;
 }
 
+/* The password is typed left to right (the input says dir="ltr"), but the button is at the end of the line of the PAGE, so room is
+   kept on both sides: the text never runs under the button, whichever side it is on. */
 .passwordBox input {
-  padding-inline-end: var(--tap-target);
+  padding-inline: var(--tap-target);
+}
+
+/* Edge draws a reveal button of its own inside a password field; this form has its own. */
+.passwordBox input::-ms-reveal,
+.passwordBox input::-ms-clear {
+  display: none;
 }
 
 .reveal {
