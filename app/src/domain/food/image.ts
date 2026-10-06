@@ -14,6 +14,21 @@ export const IMAGE_LIMITS = {
   requestMaxBytes: 1_100_000,
 } as const;
 
+/**
+ * The crop frame on the photo preview (D2), for a photo taken or chosen from the library. `enabled` is its switch: off,
+ * the preview is the plain picture and the photo is sent as prepared. The frame is always on the picture and starts
+ * as the whole picture, so sending without touching it is still one tap.
+ */
+export const PHOTO_CROP = {
+  enabled: true,
+  /** The smallest side of the frame, as a share of the picture's side (about 6.7 times zoom at most). */
+  minFraction: 0.15,
+  /** One arrow-key press moves an edge by this share of the picture. */
+  keyboardStep: 0.02,
+  /** A frame within this share of the whole picture counts as "not cropped": the prepared photo is sent as it is. */
+  fullEpsilon: 0.005,
+} as const;
+
 /** The format of an image by its first bytes. The declared MIME type is never trusted. */
 export function sniffImageType(bytes: Uint8Array): "jpeg" | "png" | "webp" | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpeg";

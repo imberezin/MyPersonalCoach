@@ -16,6 +16,8 @@ interface EncodeCall {
 function setup(options: { width: number; height: number; bytesFor?: (call: EncodeCall) => number; noContext?: boolean; nullBlob?: boolean }) {
   const calls: EncodeCall[] = [];
   const draws: Array<{ w: number; h: number }> = [];
+  /** Every argument of every drawImage call after the picture itself, to tell the 5-argument and the 9-argument forms apart. */
+  const drawArgs: number[][] = [];
   const canvases: Array<{ width: number; height: number }> = [];
   const close = vi.fn();
   const bitmap = { width: options.width, height: options.height, close };
@@ -32,7 +34,10 @@ function setup(options: { width: number; height: number; bytesFor?: (call: Encod
             : {
                 fillStyle: "",
                 fillRect: vi.fn(),
-                drawImage: (_source: unknown, _x: number, _y: number, w: number, h: number) => draws.push({ w, h }),
+                drawImage: (_source: unknown, ...rest: number[]) => {
+                  drawArgs.push(rest);
+                  draws.push({ w: rest[2], h: rest[3] });
+                },
               },
         toBlob: (callback: (blob: Blob | null) => void, type: string, quality: number) => {
           const call = { width: canvas.width, height: canvas.height, quality, type };
@@ -46,7 +51,7 @@ function setup(options: { width: number; height: number; bytesFor?: (call: Encod
   } as unknown as PrepareDeps["document"];
 
   const deps: PrepareDeps = { createImageBitmap: (async () => bitmap) as unknown as typeof createImageBitmap, document };
-  return { deps, calls, draws, canvases, close };
+  return { deps, calls, draws, drawArgs, canvases, close };
 }
 
 const file = new Blob(["x"], { type: "image/jpeg" });
@@ -175,5 +180,72 @@ describe("prepareImage", () => {
   it("throws ImageError for an image with no size, or when there is no 2d context", async () => {
     await expect(prepareImage(file, setup({ width: 0, height: 0 }).deps)).rejects.toBeInstanceOf(ImageError);
     await expect(prepareImage(file, setup({ width: 100, height: 100, noContext: true }).deps)).rejects.toBeInstanceOf(ImageError);
+  });
+
+  describe("with a crop", () => {
+    it("draws only the chosen part of the ORIGINAL, scaled to the 1024 px long side", async () => {
+      const { deps, calls, drawArgs } = setup({ width: 4000, height: 3000 });
+      const result = await prepareImage(file, deps, { crop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } });
+      // The part is 2000 x 1500 pixels of the original, so it is shrunk by the same rule as a whole photo.
+      expect(drawArgs).toEqual([[1000, 750, 2000, 1500, 0, 0, 1024, 768]]);
+      expect(calls).toEqual([{ width: 1024, height: 768, quality: 0.8, type: "image/jpeg" }]);
+      expect(result).toMatchObject({ width: 1024, height: 768 });
+    });
+
+    it("keeps every pixel of a part that is already small, and never upscales it", async () => {
+      const { deps, calls, drawArgs } = setup({ width: 4000, height: 3000 });
+      const result = await prepareImage(file, deps, { crop: { x: 0.1, y: 0.2, w: 0.2, h: 0.2 } });
+      expect(drawArgs).toEqual([[400, 600, 800, 600, 0, 0, 800, 600]]);
+      expect(calls[0]).toMatchObject({ width: 800, height: 600 });
+      expect(result).toMatchObject({ width: 800, height: 600 });
+    });
+
+    it("cuts a portrait photo by the upright picture, not by its sensor", async () => {
+      const { deps, drawArgs } = setup({ width: 3024, height: 4032 });
+      await prepareImage(file, deps, { crop: { x: 0, y: 0.5, w: 1, h: 0.5 } });
+      expect(drawArgs).toEqual([[0, 2016, 3024, 2016, 0, 0, 1024, 683]]);
+    });
+
+    it("sends the whole picture as before when the frame is the whole picture, also within a hair", async () => {
+      const whole = setup({ width: 4032, height: 3024 });
+      await prepareImage(file, whole.deps, { crop: { x: 0, y: 0, w: 1, h: 1 } });
+      expect(whole.drawArgs).toEqual([[0, 0, 1024, 768]]);
+
+      const hair = setup({ width: 4032, height: 3024 });
+      await prepareImage(file, hair.deps, { crop: { x: 0.002, y: 0, w: 0.997, h: 1 } });
+      expect(hair.drawArgs).toEqual([[0, 0, 1024, 768]]);
+
+      const none = setup({ width: 4032, height: 3024 });
+      await prepareImage(file, none.deps);
+      expect(none.drawArgs).toEqual([[0, 0, 1024, 768]]);
+    });
+
+    it("walks the same quality ladder on the part, and the 800 px fallback is measured on the part", async () => {
+      const { deps, calls, drawArgs } = setup({
+        width: 4000,
+        height: 3000,
+        bytesFor: ({ width }) => (width === 800 ? 600_000 : 900_000),
+      });
+      const result = await prepareImage(file, deps, { crop: { x: 0, y: 0, w: 0.5, h: 0.5 } });
+      expect(calls.map((call) => [call.width, call.height, call.quality])).toEqual([
+        [1024, 768, 0.8],
+        [1024, 768, 0.7],
+        [1024, 768, 0.6],
+        [1024, 768, 0.5],
+        [800, 600, 0.5],
+      ]);
+      expect(drawArgs.every((args) => args[0] === 0 && args[1] === 0 && args[2] === 2000 && args[3] === 1500)).toBe(true);
+      expect(result).toMatchObject({ width: 800, height: 600 });
+    });
+
+    it("still closes the decoded picture, and still reports an unreadable one", async () => {
+      const ok = setup({ width: 2000, height: 1000 });
+      await prepareImage(file, ok.deps, { crop: { x: 0.2, y: 0.2, w: 0.5, h: 0.5 } });
+      expect(ok.close).toHaveBeenCalledTimes(1);
+
+      const bad = setup({ width: 2000, height: 1000, nullBlob: true });
+      await expect(prepareImage(file, bad.deps, { crop: { x: 0.2, y: 0.2, w: 0.5, h: 0.5 } })).rejects.toBeInstanceOf(ImageError);
+      expect(bad.close).toHaveBeenCalledTimes(1);
+    });
   });
 });

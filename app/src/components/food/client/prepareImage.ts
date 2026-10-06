@@ -1,3 +1,4 @@
+import { cropSourceRect, isFullCrop, type CropRect, type SourceRect } from "@/domain/food/crop";
 import { IMAGE_LIMITS, computeTargetSize } from "@/domain/food/image";
 
 /** The photo could not be opened or re-encoded (a HEIC this browser cannot read, a corrupt file, out of memory). */
@@ -20,6 +21,11 @@ export interface PreparedImage {
   blob: Blob;
   width: number;
   height: number;
+}
+
+export interface PrepareOptions {
+  /** A frame on the picture as it is displayed (upright), cut from the ORIGINAL so the chosen part gets all the pixels. */
+  crop?: CropRect;
 }
 
 async function decodeWithBitmap(file: Blob, create: typeof createImageBitmap): Promise<ImageSource> {
@@ -56,6 +62,7 @@ async function decode(file: Blob, deps: PrepareDeps): Promise<ImageSource> {
 
 function encode(
   source: ImageSource,
+  region: SourceRect | null,
   size: { width: number; height: number },
   quality: number,
   doc: Pick<Document, "createElement">,
@@ -68,8 +75,10 @@ function encode(
   // JPEG has no transparency: a transparent PNG would turn black without this white fill.
   context.fillStyle = "white";
   context.fillRect(0, 0, size.width, size.height);
-  // The target is drawn straight at the small size, so a huge photo never needs a second big canvas.
-  context.drawImage(source.draw, 0, 0, size.width, size.height);
+  // The target is drawn straight at the small size, so a huge photo never needs a second big canvas. A crop is the same
+  // single draw, with the part of the original to take named first.
+  if (region) context.drawImage(source.draw, region.sx, region.sy, region.sw, region.sh, 0, 0, size.width, size.height);
+  else context.drawImage(source.draw, 0, 0, size.width, size.height);
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -90,8 +99,12 @@ function encode(
  * thumbnail, so location never leaves the phone. The long side is at most 1024 px at quality 0.8; if
  * the result is still above the target size it retries at 0.7, 0.6 and 0.5, then once at 800 px. The
  * smallest result is returned even when it is above the target (the server has more room).
+ *
+ * With a `crop` (other than the whole picture) only that part of the ORIGINAL is drawn, and the same size and quality
+ * rules apply to the part: a small plate cut from a 4000 px photo fills the 1024 px, instead of being a corner of a picture
+ * that was already shrunk.
  */
-export async function prepareImage(file: Blob, deps: PrepareDeps = {}): Promise<PreparedImage> {
+export async function prepareImage(file: Blob, deps: PrepareDeps = {}, options: PrepareOptions = {}): Promise<PreparedImage> {
   const doc = deps.document ?? (typeof document === "undefined" ? undefined : document);
   if (!doc) throw new ImageError();
 
@@ -105,20 +118,25 @@ export async function prepareImage(file: Blob, deps: PrepareDeps = {}): Promise<
   try {
     if (!(source.width > 0 && source.height > 0)) throw new ImageError();
 
-    const normal = computeTargetSize(source.width, source.height, IMAGE_LIMITS.longSidePx);
+    // The part of the original that is drawn: all of it, unless the frame is a real crop.
+    const region = options.crop && !isFullCrop(options.crop) ? cropSourceRect(options.crop, source.width, source.height) : null;
+    const partWidth = region ? region.sw : source.width;
+    const partHeight = region ? region.sh : source.height;
+
+    const normal = computeTargetSize(partWidth, partHeight, IMAGE_LIMITS.longSidePx);
     const qualities = [IMAGE_LIMITS.jpegQuality, ...IMAGE_LIMITS.retryQualities];
     let blob: Blob | null = null;
     let size = normal;
 
     for (const quality of qualities) {
-      blob = await encode(source, normal, quality, doc);
+      blob = await encode(source, region, normal, quality, doc);
       if (blob.size <= IMAGE_LIMITS.targetMaxBytes) return { blob, width: normal.width, height: normal.height };
     }
 
     // Last resort: a smaller picture at the lowest quality, unless it would not be any smaller.
-    const smaller = computeTargetSize(source.width, source.height, IMAGE_LIMITS.retryLongSidePx);
+    const smaller = computeTargetSize(partWidth, partHeight, IMAGE_LIMITS.retryLongSidePx);
     if (smaller.width < normal.width || smaller.height < normal.height) {
-      blob = await encode(source, smaller, qualities[qualities.length - 1], doc);
+      blob = await encode(source, region, smaller, qualities[qualities.length - 1], doc);
       size = smaller;
     }
     if (!blob) throw new ImageError();

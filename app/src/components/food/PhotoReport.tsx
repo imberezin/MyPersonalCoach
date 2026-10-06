@@ -6,8 +6,11 @@ import { useTranslations } from "use-intl";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Message } from "@/components/ui/Message";
 import type { AnalyzeFields } from "@/domain/food/analyzeTypes";
+import { FULL_CROP, cropKey, isFullCrop, type CropRect } from "@/domain/food/crop";
+import { PHOTO_CROP } from "@/domain/food/image";
 import { FOOD_ROUTES } from "@/domain/food/routes";
 import { AnalyzeProblem } from "./AnalyzeProblem";
+import { CropFrame } from "./CropFrame";
 import { FlowTitle } from "./FlowTitle";
 import { ProcessingPanel } from "./ProcessingPanel";
 import { createAbortScope } from "./client/abortScope";
@@ -20,6 +23,7 @@ import styles from "./food.module.css";
 const TITLE_ID = "photo-title";
 const NOTE_ID = "photo-note";
 const HELP_ID = "photo-camera-help";
+const CROP_HINT_ID = "photo-crop-hint";
 /** After this long the processing panel adds its extra, calm line. */
 const SLOW_AFTER_MS = 8_000;
 
@@ -30,17 +34,32 @@ interface PreparedPhoto {
   height: number;
 }
 
+/** The picture on the preview: with or without the crop frame around it it is the same element. */
+function PreviewImage({ photo, alt }: { photo: PreparedPhoto; alt: string }) {
+  return (
+    // A blob: URL of a picture that exists only in this tab; next/image cannot optimize it.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={photo.url} alt={alt} width={photo.width} height={photo.height} className={styles.previewImage} />
+  );
+}
+
 /**
  * D2 and its processing state D5. A photo is taken or chosen with the phone's own file input, shrunk in the
  * browser (EXIF and location are dropped by the re-encode), previewed, and sent once. It is held in memory
  * only: it is never stored, so a reload starts at the beginning, calmly. The phases are the pure
  * photoReducer; this component owns the file, the request and the timers.
+ *
+ * The preview carries a free crop frame (`CropFrame`), for a photo from the camera and from the library alike, since both
+ * come through the same handler. The frame starts as the whole picture, so sending untouched is as before. A real crop is cut
+ * from the ORIGINAL file (kept in memory with the rest) when Send is pressed, not from the small preview, so the chosen part
+ * gets all the pixels; the result is remembered, so a retry sends the very same picture under the very same request id.
  */
 export function PhotoReport() {
   const t = useTranslations("food");
   const router = useRouter();
   const [state, dispatch] = useReducer(photoReducer, initialPhotoState);
   const [photo, setPhoto] = useState<PreparedPhoto | null>(null);
+  const [crop, setCrop] = useState<CropRect>(FULL_CROP);
   const [note, setNote] = useState("");
   const [cancelled, setCancelled] = useState(false);
   const [abortScope] = useState(createAbortScope);
@@ -52,6 +71,10 @@ export function PhotoReport() {
   const mountedAt = useRef(0);
   /** Counts prepared photos, so a new photo is a new request even when the note is the same. */
   const photoSeq = useRef(0);
+  /** The file the person picked, in memory only: a real crop is cut from it, not from the small preview. */
+  const original = useRef<File | null>(null);
+  /** The last cropped picture, for this photo and this frame, so a retry or a second Send re-uses it. */
+  const cropped = useRef<{ seq: number; key: string; blob: Blob } | null>(null);
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusSendNext = useRef(false);
 
@@ -92,6 +115,10 @@ export function PhotoReport() {
     input.value = "";
     if (!file) return;
 
+    // A new photo starts with the whole picture, and nothing cropped from an earlier one can be sent for it.
+    original.current = file;
+    cropped.current = null;
+    setCrop(FULL_CROP);
     setPhoto(null);
     setCancelled(false);
     dispatch({ type: "PICK" });
@@ -105,19 +132,54 @@ export function PhotoReport() {
     }
   }
 
+  /**
+   * The picture to send: the prepared photo as it is when the frame is the whole picture (no second re-encode), otherwise
+   * the chosen part cut from the original. The cut is remembered for this photo and this frame.
+   */
+  async function pictureFor(current: PreparedPhoto, frame: CropRect): Promise<Blob> {
+    if (!PHOTO_CROP.enabled || isFullCrop(frame)) return current.blob;
+    const key = cropKey(frame);
+    const known = cropped.current;
+    if (known && known.seq === photoSeq.current && known.key === key) return known.blob;
+    const source = original.current;
+    if (!source) return current.blob;
+    const prepared = await prepareImage(source, {}, { crop: frame });
+    cropped.current = { seq: photoSeq.current, key, blob: prepared.blob };
+    return prepared.blob;
+  }
+
   async function submit(current: PreparedPhoto) {
     const signal = abortScope.begin();
     if (slowTimer.current) clearTimeout(slowTimer.current);
     slowTimer.current = setTimeout(() => dispatch({ type: "SLOW" }), SLOW_AFTER_MS);
 
+    // The frame as it is at the moment of Send: a later change cannot alter what this request carries.
+    const frame = crop;
+    let picture: Blob;
+    try {
+      picture = await pictureFor(current, frame);
+    } catch {
+      // The cut itself failed (a picture the browser cannot draw again, or no memory): the same calm panel as an unusable file.
+      if (signal.aborted) return;
+      if (slowTimer.current) {
+        clearTimeout(slowTimer.current);
+        slowTimer.current = null;
+      }
+      dispatch({ type: "FAIL", reason: "unsupported_type" });
+      return;
+    }
+    // Cancelled or replaced while the picture was being cut: whoever did that already moved the screen and the timer.
+    if (signal.aborted) return;
+
     const text = note.trim();
     const fields: AnalyzeFields = {
       mode: "photo",
       text,
-      requestId: requestIds.idFor("photo", `photo:${photoSeq.current}:${text}`),
+      // A different frame is a different picture, so it is a different request; the same frame and note keep the same id.
+      requestId: requestIds.idFor("photo", `photo:${photoSeq.current}:${cropKey(frame)}:${text}`),
       composedMs: Math.max(0, Math.round(Date.now() - mountedAt.current)),
     };
-    const result = await sendAnalyze({ fields, image: current.blob }, { signal });
+    const result = await sendAnalyze({ fields, image: picture }, { signal });
 
     // Cancelled or replaced while waiting: whoever did that already moved the screen and the timer.
     if (signal.aborted) return;
@@ -157,6 +219,9 @@ export function PhotoReport() {
   }
 
   function differentPhoto() {
+    original.current = null;
+    cropped.current = null;
+    setCrop(FULL_CROP);
     setPhoto(null);
     setCancelled(false);
     dispatch({ type: "RESET" });
@@ -244,16 +309,32 @@ export function PhotoReport() {
       {showPhoto && photo ? (
         <>
           <div className={styles.previewFrame}>
-            {/* A blob: URL of a picture that exists only in this tab; next/image cannot optimize it. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photo.url}
-              alt={t("photo.previewAlt")}
-              width={photo.width}
-              height={photo.height}
-              className={styles.previewImage}
-            />
+            {PHOTO_CROP.enabled ? (
+              <CropFrame
+                aspect={photo.width / photo.height}
+                crop={crop}
+                onChange={setCrop}
+                interactive={state.phase === "ready"}
+                hintId={CROP_HINT_ID}
+              >
+                <PreviewImage photo={photo} alt={t("photo.previewAlt")} />
+              </CropFrame>
+            ) : (
+              <PreviewImage photo={photo} alt={t("photo.previewAlt")} />
+            )}
           </div>
+          {PHOTO_CROP.enabled ? (
+            <div className={styles.cropInfo}>
+              <p id={CROP_HINT_ID} className={styles.hint} aria-live="polite">
+                {isFullCrop(crop) ? t("photo.cropHint") : t("photo.cropActive")}
+              </p>
+              {!isFullCrop(crop) && state.phase === "ready" ? (
+                <Button type="button" variant="tertiary" onClick={() => setCrop(FULL_CROP)}>
+                  {t("photo.cropReset")}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           <div className={styles.field}>
             <label htmlFor={NOTE_ID} className={styles.label}>
               {t("photo.noteLabel")}

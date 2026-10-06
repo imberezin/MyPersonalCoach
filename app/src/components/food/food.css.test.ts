@@ -138,6 +138,67 @@ describe("food.module.css", () => {
     expect(image).toContain("object-fit: contain");
   });
 
+  it("sizes the crop area to the picture's own shape, so the frame's percentages are exact", () => {
+    const stage = ruleFor(".cropStage")?.body ?? "";
+    expect(stage).toMatch(/aspect-ratio\s*:\s*var\(--aspect/);
+    expect(stage).toMatch(/inline-size\s*:\s*min\(100%,\s*calc\(60dvh \* var\(--aspect/);
+    const image = ruleFor(".cropStage > .previewImage")?.body ?? "";
+    expect(image).toMatch(/block-size\s*:\s*100%/);
+    expect(image).toMatch(/max-block-size\s*:\s*none/);
+  });
+
+  it("takes touches only on the handles, never on the dimming, the area or the page around the frame", () => {
+    expect(ruleFor(".cropClip")?.body).toMatch(/pointer-events\s*:\s*none/);
+    expect(ruleFor(".cropHandles")?.body).toMatch(/pointer-events\s*:\s*none/);
+    const grab = ruleFor(".cropMove,\n.cropEdgeH,\n.cropEdgeV,\n.cropHandle")?.body ?? "";
+    expect(grab).toMatch(/touch-action\s*:\s*none/);
+    expect(grab).toMatch(/pointer-events\s*:\s*auto/);
+    // The area and the picture keep the browser's own scrolling.
+    expect(ruleFor(".cropStage")?.body).not.toMatch(/touch-action/);
+  });
+
+  it("gives every corner a full tap target, and draws the dimming from a token color", () => {
+    const handle = ruleFor(".cropHandle")?.body ?? "";
+    expect(handle).toMatch(/inline-size\s*:\s*var\(--tap-target\)/);
+    expect(handle).toMatch(/block-size\s*:\s*var\(--tap-target\)/);
+    expect(ruleFor(".cropBox")?.body).toMatch(/color-mix\(in srgb, var\(--color-text-primary\)/);
+  });
+
+  it("draws each corner as a thick white L whose arms run along its own two sides, with logical sides only", () => {
+    const base = ruleFor(".cropHandle::after")?.body ?? "";
+    expect(base).toMatch(/border\s*:\s*0 solid var\(--color-surface\)/);
+    expect(base).toMatch(/filter\s*:\s*drop-shadow\(/);
+    const sides = {
+      nw: ["border-block-start-width", "border-inline-start-width"],
+      ne: ["border-block-start-width", "border-inline-end-width"],
+      sw: ["border-block-end-width", "border-inline-start-width"],
+      se: ["border-block-end-width", "border-inline-end-width"],
+    } as const;
+    for (const [corner, expected] of Object.entries(sides)) {
+      const rule = ruleFor(`.cropHandle[data-corner="${corner}"]::after`)?.body ?? "";
+      for (const property of expected) expect(rule, `${corner} ${property}`).toMatch(new RegExp(`${property}\\s*:\\s*4px`));
+      // Exactly two sides are drawn.
+      expect(rule.match(/border-(?:block|inline)-(?:start|end)-width/g) ?? [], corner).toHaveLength(2);
+    }
+  });
+
+  it("keeps the frame's line visible on pale photos too, and shows the thirds grid only while the frame is in use", () => {
+    const line = ruleFor(".cropBox")?.body ?? "";
+    expect(line).toMatch(/border\s*:\s*2px solid var\(--color-surface\)/);
+    // A dark ring just outside the white line, then the dimming.
+    expect(line).toMatch(/0 0 0 1px color-mix\(in srgb, var\(--color-text-primary\)/);
+    expect(line).toMatch(/0 0 0 100vmax color-mix\(in srgb, var\(--color-text-primary\)/);
+    expect(line).not.toMatch(/linear-gradient/);
+    const grid = ruleFor('.cropBox[data-active="true"]')?.body ?? "";
+    expect(grid.match(/linear-gradient\(/g) ?? []).toHaveLength(4);
+  });
+
+  it("marks the middle of each side with a short bar", () => {
+    expect(ruleFor(".cropEdgeH::after,\n.cropEdgeV::after")?.body).toMatch(/background\s*:\s*var\(--color-surface\)/);
+    expect(ruleFor(".cropEdgeH::after")?.body).toMatch(/inline-size\s*:\s*1\.75rem/);
+    expect(ruleFor(".cropEdgeV::after")?.body).toMatch(/block-size\s*:\s*1\.75rem/);
+  });
+
   it("shows a focused title with no ring (it is not a control)", () => {
     expect(ruleFor(".title:focus,\n.title:focus-visible")?.body).toMatch(/outline\s*:\s*none/);
   });

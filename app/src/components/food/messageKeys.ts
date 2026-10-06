@@ -1,4 +1,5 @@
 import { PROBLEM_REASONS } from "@/domain/food/analyzeTypes";
+import { CROP_CORNERS } from "@/domain/food/crop";
 import { MEAL_TYPES, PORTION_SIZES, PORTION_UNITS } from "@/domain/food/types";
 import { PHOTO_BODY_REASONS } from "./client/problemActions";
 
@@ -40,11 +41,16 @@ export const FOOD_MESSAGE_KEYS: readonly string[] = [
     "preparing",
     "ready",
     "previewAlt",
+    "cropHint",
+    "cropActive",
+    "cropFrame",
+    "cropReset",
     "another",
     "send",
     "unreadable",
     "offline",
   ]),
+  ...leaves("food.photo.cropCorner", CROP_CORNERS),
   ...leaves("food.photoUnavailable", ["title", "body", "writeInstead"]),
   ...leaves("food.text", [
     "title",

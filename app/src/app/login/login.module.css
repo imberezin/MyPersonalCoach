@@ -56,6 +56,48 @@
   font-size: var(--font-size-body);
 }
 
+/* The password field: the input and the show/hide button share one box. The button sits at the END of the line (the left in
+   Hebrew, the right in English) and the text never runs under it. */
+.passwordBox {
+  position: relative;
+  display: grid;
+}
+
+.passwordBox input {
+  padding-inline-end: var(--tap-target);
+}
+
+.reveal {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  display: grid;
+  place-items: center;
+  inline-size: var(--tap-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.reveal svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (hover: hover) {
+  .reveal:hover {
+    color: var(--color-text-primary);
+  }
+}
+
 /* A technical error (the sign-in did not work). Dark readable text on Error Light,
    with the Error color only as the edge: the error color alone is too light for text. */
 .error {

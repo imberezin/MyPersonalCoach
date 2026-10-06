@@ -20,6 +20,8 @@
     "title": "Sign in",
     "email": "Email",
     "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "submit": "Sign in",
     "errors": {
       "invalid_credentials": "The email or password is incorrect.",
@@ -86,6 +88,16 @@
       "preparing": "Getting the photo ready...",
       "ready": "The photo is ready",
       "previewAlt": "The photo you chose",
+      "cropHint": "You can drag the corners, or move them with the arrow keys, to focus on what you want recognized.",
+      "cropActive": "Only the part inside the frame will be sent.",
+      "cropFrame": "Crop frame",
+      "cropReset": "Whole photo",
+      "cropCorner": {
+        "nw": "Top left corner",
+        "ne": "Top right corner",
+        "sw": "Bottom left corner",
+        "se": "Bottom right corner"
+      },
       "another": "A different photo",
       "send": "Send",
       "unreadable": "I couldn't open that photo. You can try another one or write instead.",
