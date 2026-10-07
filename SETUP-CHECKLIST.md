@@ -293,6 +293,104 @@ order by 1;
 **תוצאות ההרצה הראשונה (2026-10-07, הרצת הבעלים):** מנוי push אחד, מ-`web.push.apple.com` (אייפון, iOS 18.7), נוצר ב-2026-10-01, `last_success_at` ריק. העדפות: `coach`, `meal_reporting`, `weekly_weigh_in` ו-`weekly_summary` דלוקות, `activity` כבויה, שעות שקט 00:00 עד 08:00. פרופיל: `WEEKLY_CYCLE`, `first_week_ended_at` = 2026-10-07 17:35:55 UTC. cron: `engine-tick` (`*/5 * * * *`, `timeout_milliseconds := 10000`) ו-`shabbat-topup` (`0 6 * * 0,3`, `timeout_milliseconds := 30000`), שניהם פעילים וקוראים את הסוד מה-Vault. `notification_log`: 0 שורות. `push_subscriptions_shape`: `validated false`, כצפוי.
 
 
+## 6ד. תזמון: שולח ההתראות (התראת הסיכום השבועי)
+
+> **סטטוס (2026-10-07):** הקוד נבנה ונבדק, והוא **לא מופעל**. כל השלבים במארח בידיך ובאישורך, אחד אחד. עד שתתזמן אותו, הנתיב לא נקרא אף פעם, ואחרי שתתזמן הוא נשאר "ריצת יבש" (קורא וסופר, לא כותב ולא שולח) עד שתדליק שליחה בכוונה. סדר הבנייה וההחלטות: `TODO.md` סעיף 4.
+
+הנתיב `POST /api/engine/notify` שולח לך התראה אחת בשבוע, ביום ראשון אחרי 08:00 (שעות השקט שלך נגמרות ב-08:00), כשסיכום השבוע מוכן והכרטיס "השבוע שלך" ב-Home עוד לא נפתח ולא נדחה. הוא נכשל סגור: **שליחה אמיתית רק כש-`NOTIFY_SENDER_LIVE` הוא בדיוק `1` ובבקשה אין `?dryRun=1`**. כל ערך אחר (ריק, `true`, `0`) משאיר אותו ריצת יבש. הוא לא מקבל מהבקשה שום משתמש, טקסט, שעה או סוג. הוא נתיב נפרד מ-`engine-tick`, ולכן אפשר לכבות אותו בלי לגעת ב-tick. הרגע השבועי הראשון בחשבון שלך הוא ראשון 2026-10-18 ב-05:00; לפני כן התשובה תמיד `no_moment`.
+
+הסדר:
+
+1. **הקוד באתר.** אתה דוחף ל-`main`, ו-Vercel פורס. אין עדיין תזמון, ולכן שום דבר לא קורא לנתיב, והוא בכל מקרה ריצת יבש כברירת מחדל.
+2. **המיגרציה.** ב-SQL Editor מריצים את `app/supabase/migrations/20261007120000_notification_moments.sql` פעם אחת (שתי עמודות וארבעה אילוצים על `notification_log`, בלי טבלה חדשה ובלי trigger). אימות, פקודה אחת, קריאה בלבד:
+
+```sql
+select 'columns' as check_name,
+       string_agg(column_name, ', ' order by ordinal_position) as detail
+  from information_schema.columns
+ where table_schema = 'public' and table_name = 'notification_log'
+union all
+select 'constraint ' || conname, 'validated ' || convalidated
+  from pg_constraint
+ where conrelid = 'public.notification_log'::regclass
+   and contype in ('c', 'u')
+   and conname in ('notification_log_kind_known', 'notification_log_moment_pair', 'notification_log_moment_key_length', 'notification_log_one_per_moment')
+order by 1;
+```
+
+   הצפוי: העמודות `id, user_id, channel, intervention_instance_id, sent_at, suppressed_reason, kind, moment_key`, וארבעה אילוצים עם `validated true`.
+
+3. **קריאת בדיקה ידנית (ריצת יבש, לא כותבת):**
+
+```powershell
+curl.exe -X POST "https://YOUR-APP.vercel.app/api/engine/notify?dryRun=1" -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+   התשובה היא מספרים בלבד. עד 2026-10-18 ב-05:00 צפוי `"mode":"dry"`, `"candidates":1`, `"due":0` ו-`"skippedBy":{"no_moment":1}`. אם המיגרציה עוד לא הוחלה תראה `"migrationPending":1`, וזה תקין בריצת יבש. מה כל שדה אומר: `due` = כמה התראות היו יוצאות עכשיו, `skippedBy` = למה לא (`quiet_hours` = שעות שקט, `already_claimed` = כבר נשלחה, `card_closed` = פתחת או דחית את הכרטיס, `preference_off` = ההעדפה כבויה, `offline` = תקופת Offline), `stuck` = שורה שנתקעה ב-`pending` יותר מעשר דקות, `failed` = קריאה שנכשלה.
+
+4. **תזמון בריצת יבש** (`?dryRun=1` בכתובת). את שם הסוד ב-Vault קח מהפקודה של `engine-tick` (`select command from cron.job where jobname = 'engine-tick';`):
+
+```sql
+-- כל 5 דקות, רק בימים ראשון עד רביעי ב-UTC (חלון הכרטיס הוא ראשון 05:00 עד רביעי 05:00 שעון ישראל), כדי לחסוך קריאות.
+select cron.schedule('notify', '*/5 * * * 0-3', $$
+  select net.http_post(
+    url := 'https://YOUR-APP.vercel.app/api/engine/notify?dryRun=1',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'THE_SAME_NAME_AS_ENGINE_TICK'),
+      'Content-Type', 'application/json'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+$$);
+
+select jobname, schedule, active from cron.job where jobname in ('engine-tick', 'shabbat-topup', 'notify');
+```
+
+   `timeout_milliseconds` מפורש כי ברירת המחדל של `pg_net` (5 שניות) מסמנת ריצה איטית ככישלון גם כשהשרת סיים.
+
+5. **מעבר לשליחה אמיתית** (ההחלטה שלך: מיד אחרי ריצת יבש קצרה). שני שינויים, ובשניהם אתה:
+   - ב-Vercel: Settings → Environment Variables → `NOTIFY_SENDER_LIVE` = `1`, ואז Redeploy. (לא אומת שמשתנה חדש נכנס בלי פריסה מחדש.)
+   - ב-SQL Editor: תזמון חדש בלי `?dryRun=1`:
+
+```sql
+select cron.unschedule('notify');
+select cron.schedule('notify', '*/5 * * * 0-3', $$
+  select net.http_post(
+    url := 'https://YOUR-APP.vercel.app/api/engine/notify',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'THE_SAME_NAME_AS_ENGINE_TICK'),
+      'Content-Type', 'application/json'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+$$);
+```
+
+   ההתראה האוטומטית הראשונה תצא ביום ראשון 2026-10-18 בין 08:00 ל-08:05. בין 05:00 ל-08:00 הנתיב רק ידחה (`quiet_hours`), וזו הדרך הבטוחה.
+
+### כיבוי, מהמהיר לאיטי
+
+1. להעביר את הנתיב לריצת יבש: `?dryRun=1` בתזמון (או `cron.unschedule` ואז תזמון מחדש עם `?dryRun=1`).
+2. `select cron.unschedule('notify');`: אף קריאה לא יוצאת, וה-`engine-tick` ממשיך כרגיל.
+3. לכבות את ההעדפה `weekly_summary` בחשבון (ב-SQL, על שורת ההעדפות שלך, ולשמור את חמשת המפתחות).
+4. להסיר את `NOTIFY_SENDER_LIVE` ב-Vercel ולפרוס מחדש.
+
+### בדיקת בריאות אחרי הריצה הראשונה
+
+שאילתות נפרדות (ה-SQL Editor מציג רק את התוצאה של האחרונה בכל הרצה):
+
+```sql
+select kind, moment_key, suppressed_reason, sent_at from public.notification_log order by sent_at desc limit 5;
+```
+
+`suppressed_reason` ריק = נשלחה. `pending` יותר מעשר דקות = נתקעה באמצע (לא תישלח שוב לבד; מחיקת השורה ביד מאפשרת ניסיון חדש). `send_failed` = אף מכשיר לא קיבל. `subscription_gone` = אפל אמרה שהמנוי מת, והשורה נמחקה מ-`push_subscriptions`.
+
+```sql
+select status, start_time from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'notify') order by start_time desc limit 3;
+```
+
+(`net._http_response` נמחק אחרי כ-6 שעות, ו-`cron.job_run_details` מראה רק שהקריאה נשלחה. התשובה האמיתית של הנתיב היא ה-JSON של ה-`curl` למעלה.)
+
 ## 7. בדיקה מול Supabase מקומי
 
 נעשה, ראה סעיף 1ב: `npm run local:start` מפעיל את הסביבה המלאה של Supabase בתוך Docker (ה-`init` כבר בוצע, והתצורה ב-`app/supabase/config.toml`). ה-RLS נבדק גם על PGlite (`npm test`) וגם על תמונת Supabase האמיתית.
