@@ -20,7 +20,8 @@
     "local:migrate": "supabase migration up --local",
     "local:setup": "node scripts/local-setup.mjs",
     "bakeoff": "node scripts/bake-off/cli.mjs",
-    "seed:demo": "node scripts/seed-demo.mjs"
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "push:rehearse": "node scripts/push-rehearse.mjs"
   },
   "dependencies": {
     "@hebcal/core": "^6.11.0",
