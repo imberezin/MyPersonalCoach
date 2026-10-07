@@ -290,6 +290,8 @@ order by 1;
 - **5, `notification_log`:** צפוי `0`.
 - **6, האילוץ `push_subscriptions_shape`:** `validated false` צפוי (הוא נוצר `NOT VALID` כדי לבדוק רק שורות חדשות), ו-`true` גם תקין.
 
+**תוצאות ההרצה הראשונה (2026-10-07, הרצת הבעלים):** מנוי push אחד, מ-`web.push.apple.com` (אייפון, iOS 18.7), נוצר ב-2026-10-01, `last_success_at` ריק. העדפות: `coach`, `meal_reporting`, `weekly_weigh_in` ו-`weekly_summary` דלוקות, `activity` כבויה, שעות שקט 00:00 עד 08:00. פרופיל: `WEEKLY_CYCLE`, `first_week_ended_at` = 2026-10-07 17:35:55 UTC. cron: `engine-tick` (`*/5 * * * *`, `timeout_milliseconds := 10000`) ו-`shabbat-topup` (`0 6 * * 0,3`, `timeout_milliseconds := 30000`), שניהם פעילים וקוראים את הסוד מה-Vault. `notification_log`: 0 שורות. `push_subscriptions_shape`: `validated false`, כצפוי.
+
 
 ## 7. בדיקה מול Supabase מקומי
 
