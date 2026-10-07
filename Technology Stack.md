@@ -538,7 +538,7 @@ User data + events
 3. ~~close the week and generate the weekly summary~~ dropped as a job: the weekly summary is derived from live data on every read and written only when the owner presses a button (TODO.md section 0, Weekly Learning decisions), so no job precomputes it;
 4. remove stale temporary photos (not built).
 
-The Web Push sender is not part of the tick either. It will be its own route, `/api/engine/notify`, so that it can be switched off independently (planned build order and open decisions: TODO.md section 4).
+The Web Push sender is not part of the tick either. It is its own route, `POST /api/engine/notify` (built 2026-10-07, not scheduled yet), so that it can be switched off independently with `cron.unschedule('notify')`. It fails closed: a dry run unless `NOTIFY_SENDER_LIVE=1` and no `dryRun` parameter is present. Design, decisions and rollout: TODO.md section 4 and SETUP-CHECKLIST.md 6d.
 
 Whether `pg_cron`-only activity counts as "database activity" against Supabase's inactivity pause is unverified, so the plan does not rely on it: daily use of the app is the keep-alive.
 
