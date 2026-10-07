@@ -6,6 +6,9 @@ import { it } from "vitest";
 import { createNotificationProvider } from "@/lib/notifications/factory";
 import { parseRehearseArgs, runRehearsal, type StoredSubscription } from "./rehearse";
 
+// vitest does not show the console output of a test that passes, so the lines go straight to the terminal.
+const write = (line: string) => process.stdout.write(line + "\n");
+
 // The live runner of `npm run push:rehearse` (see scripts/push-rehearse.mjs). It is a "test" only because vitest is the one runner
 // that can import the app's TypeScript (vitest.config.mts); `npm test` never includes it. The OWNER runs it, once, on purpose.
 //
@@ -55,7 +58,7 @@ it("push-rehearse", async () => {
   const result = await runRehearsal(parsed.value, {
     provider,
     keySource: source ? source[0] : "none",
-    log: (line) => console.log(line),
+    log: (line) => write(line),
     async readSubscriptions(userId) {
       if (client === null) return null;
       let query = client.from("push_subscriptions").select("user_id, endpoint, p256dh, auth").order("created_at").limit(50);

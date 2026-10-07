@@ -21,7 +21,8 @@
     "local:setup": "node scripts/local-setup.mjs",
     "bakeoff": "node scripts/bake-off/cli.mjs",
     "seed:demo": "node scripts/seed-demo.mjs",
-    "push:rehearse": "node scripts/push-rehearse.mjs"
+    "push:rehearse": "node scripts/push-rehearse.mjs",
+    "rehearse:weekly-push": "node scripts/rehearse-weekly-push.mjs"
   },
   "dependencies": {
     "@hebcal/core": "^6.11.0",
