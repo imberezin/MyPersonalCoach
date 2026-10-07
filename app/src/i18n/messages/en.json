@@ -753,6 +753,12 @@
       "home": "Back to Home"
     }
   },
+  "notifications": {
+    "weeklySummary": {
+      "title": "Your week",
+      "body": "I have a few words about last week. When it suits you, take a look."
+    }
+  },
   "notFound": {
     "title": "This page was not found",
     "body": "You can go back to Home and continue from there.",
