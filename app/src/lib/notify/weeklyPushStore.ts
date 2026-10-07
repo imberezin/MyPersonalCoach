@@ -5,7 +5,7 @@ import { parseQuietHours } from "@/domain/quietHours";
 import { loadOfflinePeriods } from "@/lib/home/load";
 import type { PushSubscriptionRecord } from "@/lib/notifications/types";
 import { loadWeeklyHomeFact } from "@/lib/weekly/home";
-import type { ClaimResult, ClaimState, FinishState, PushCandidate, SendFacts, WeeklyPushStore } from "./store";
+import { STUCK_AFTER_MS, type ClaimResult, type ClaimState, type FinishState, type PushCandidate, type SendFacts, type WeeklyPushStore } from "./store";
 
 /** An explicit allow-list per table: nothing else about the person (goals, weight, motivation, name) is read. */
 export const PROFILE_COLUMNS = "user_id, language, timezone, lifecycle_state";
@@ -70,7 +70,7 @@ export function createSupabaseWeeklyPushStore(admin: SupabaseClient): WeeklyPush
       const [periods, subscriptions, claim] = await Promise.all([
         loadOfflinePeriods(admin, userId, now),
         readSubscriptions(admin, userId),
-        readClaim(admin, userId, momentKey),
+        readClaim(admin, userId, momentKey, now),
       ]);
       return { periods, subscriptions, claim };
     },
@@ -174,11 +174,11 @@ async function readSubscriptions(admin: SupabaseClient, userId: string): Promise
   }
 }
 
-async function readClaim(admin: SupabaseClient, userId: string, momentKey: string): Promise<ClaimState> {
+async function readClaim(admin: SupabaseClient, userId: string, momentKey: string, now: Date): Promise<ClaimState> {
   try {
     const { data, error } = await admin
       .from("notification_log")
-      .select("id")
+      .select("id, suppressed_reason, sent_at")
       .eq("user_id", userId)
       .eq("kind", WEEKLY_PUSH.kind)
       .eq("moment_key", momentKey)
@@ -189,7 +189,10 @@ async function readClaim(admin: SupabaseClient, userId: string, momentKey: strin
       return "unknown";
     }
     if (!Array.isArray(data)) return "unknown";
-    return data.length > 0 ? "exists" : "none";
+    if (data.length === 0) return "none";
+    const row = data[0] as Record<string, unknown>;
+    const sentAt = typeof row.sent_at === "string" ? Date.parse(row.sent_at) : Number.NaN;
+    return row.suppressed_reason === "pending" && now.getTime() - sentAt > STUCK_AFTER_MS ? "stuck" : "exists";
   } catch {
     console.error("Weekly push: reading the claim threw");
     return "unknown";

@@ -152,7 +152,19 @@ describe("loadFact and loadSendFacts", () => {
     const subs = log.find((l) => l.table === "push_subscriptions");
     expect(subs?.calls).toEqual([["select", SUBSCRIPTION_COLUMNS], ["eq", "user_id", USER], ["order", "created_at"], ["limit", 20]]);
     const claim = log.find((l) => l.table === "notification_log");
-    expect(claim?.calls).toEqual([["select", "id"], ["eq", "user_id", USER], ["eq", "kind", "weekly_summary"], ["eq", "moment_key", MOMENT], ["limit", 1]]);
+    expect(claim?.calls).toEqual([["select", "id, suppressed_reason, sent_at"], ["eq", "user_id", USER], ["eq", "kind", "weekly_summary"], ["eq", "moment_key", MOMENT], ["limit", 1]]);
+  });
+
+  it("tells a claim that is still pending after ten minutes (a crash) from one that finished or is in flight", async () => {
+    const claimOf = async (row: Record<string, unknown>) =>
+      (await store({ "notification_log:select": { data: [row], error: null } }).store.loadSendFacts(USER, { weekStart: "2026-10-11", card: true }, NOW)).claim;
+    const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
+    expect(await claimOf({ id: "r", suppressed_reason: "pending", sent_at: minutesAgo(11) })).toBe("stuck");
+    expect(await claimOf({ id: "r", suppressed_reason: "pending", sent_at: minutesAgo(2) })).toBe("exists");
+    expect(await claimOf({ id: "r", suppressed_reason: "pending", sent_at: minutesAgo(10) })).toBe("exists");
+    expect(await claimOf({ id: "r", suppressed_reason: null, sent_at: minutesAgo(600) })).toBe("exists");
+    expect(await claimOf({ id: "r", suppressed_reason: "send_failed", sent_at: minutesAgo(600) })).toBe("exists");
+    expect(await claimOf({ id: "r", suppressed_reason: "pending", sent_at: "not a date" })).toBe("exists");
   });
 
   it("says none when no claim exists, and unknown when a read fails", async () => {

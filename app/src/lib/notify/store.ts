@@ -10,6 +10,9 @@ import type { PushSubscriptionRecord } from "@/lib/notifications/types";
  * says "unknown" (null or a named state), never a guess, and none of them logs a user id, an endpoint or a key.
  */
 
+/** A claim that is still 'pending' after this long is a crash, not a send in flight (a send is deadline-bounded to seconds). */
+export const STUCK_AFTER_MS = 10 * 60_000;
+
 /** A person the sender looks at: in the weekly cycle, with what is known without another query. */
 export interface PushCandidate {
   userId: string;
@@ -24,13 +27,15 @@ export interface PushCandidate {
 }
 
 /**
- * - exists: a notification_log row for this (user, kind, moment) is there.
+ * - exists: a notification_log row for this (user, kind, moment) is there (the push was claimed: sent, failed, or still being sent).
+ * - stuck: the row is there and has been 'pending' for longer than any send takes (a crash between the claim and its end). There is no
+ *   automatic retry, so it is only counted and reported; deleting the row by hand allows a new attempt.
  * - none: it is not.
  * - migration_missing: the columns of 20261007120000_notification_moments.sql are not in the database yet. A dry run can still
  *   count; a live run must stop.
  * - unknown: the read failed.
  */
-export type ClaimState = "exists" | "none" | "migration_missing" | "unknown";
+export type ClaimState = "exists" | "stuck" | "none" | "migration_missing" | "unknown";
 
 export interface SendFacts {
   /** null = unknown. */
