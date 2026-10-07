@@ -237,6 +237,60 @@ select status, start_time from cron.job_run_details where jobid = (select jobid 
 select status_code, created from net._http_response order by created desc limit 3;
 ```
 
+## 6ג. בדיקות קריאה לפני בניית שולח ההתראות
+
+(נוסף 2026-10-07. זה צעד 1ב בסדר הבנייה של שולח ההתראות, `TODO.md` סעיף 4. אין כאן שום שינוי במסד: רק קריאה.)
+
+מריצים ב-**Supabase → SQL Editor** (המסד המארח) את השאילתה הבאה כמות שהיא, ומדביקים לי את הטבלה שחוזרת. היא פקודה אחת, כי ה-SQL Editor מציג רק את התוצאה של הפקודה האחרונה. היא מציגה רק את שם המארח של כל מנוי push (למשל `web.push.apple.com`), לא את הכתובת המלאה ולא את המפתחות.
+
+```sql
+select '1. push subscriptions' as check_name, count(*)::text as detail
+  from public.push_subscriptions
+union all
+select '1b. subscription ' || row_number() over (order by created_at),
+       split_part(endpoint, '/', 3)
+         || ' | created ' || created_at::date
+         || ' | last_success ' || coalesce(last_success_at::date::text, 'never')
+         || ' | ' || left(coalesce(user_agent, 'no user agent'), 50)
+  from public.push_subscriptions
+union all
+select '2. notification preferences',
+       notifications::text
+         || ' | quiet ' || coalesce(quiet_hours_start::text, 'null') || ' to ' || coalesce(quiet_hours_end::text, 'null')
+  from public.user_preferences
+union all
+select '3. profile',
+       lifecycle_state
+         || ' | first_week_ended_at ' || coalesce(first_week_ended_at::text, 'null')
+         || ' | ' || timezone
+  from public.profiles
+union all
+select '4. cron ' || jobname,
+       schedule
+         || ' | active ' || active
+         || ' | vault secret ' || (command like '%vault.decrypted_secrets%')
+         || ' | ' || coalesce(substring(command from 'timeout_milliseconds\s*:=\s*[0-9]+'), 'no explicit timeout')
+  from cron.job
+union all
+select '5. notification_log rows', count(*)::text
+  from public.notification_log
+union all
+select '6. constraint ' || conname, 'validated ' || convalidated
+  from pg_constraint
+ where conname = 'push_subscriptions_shape'
+order by 1;
+```
+
+איך קוראים את התוצאה:
+
+- **1 ו-1b, מנויי push:** כמה מנויים נשמרו ומאיזה שירות. מנוי מ-`web.push.apple.com` הוא האייפון. מנוי משירות אחר (למשל `fcm.googleapis.com`) הוא כנראה מנוי הפיתוח מ-localhost, שנוצר עם מפתחות VAPID אחרים ולכן לא יהיה תקף מול הפרודקשן; נחליט ביחד אם להסיר אותו ידנית.
+- **2, העדפות:** האם `weekly_summary` הוא `true`. אם `false`, התראה שבועית לא תגיע גם אחרי שהשולח ייבנה, ונדליק אותו בצעד 11. שעות השקט צריכות להופיע `00:00:00 to 08:00:00`.
+- **3, פרופיל:** `WEEKLY_CYCLE` עם `first_week_ended_at` מלא פירושו שכבר לחצת "נמשיך". `FIRST_WEEK` פירושו שעוד לא.
+- **4, cron:** `engine-tick` צריך להופיע עם `*/5 * * * *` ו-`active true`. `vault secret true` אומר שהסוד נקרא מה-Vault ולא כתוב בפקודה. אם כתוב `no explicit timeout`, ה-timeout הוא ברירת המחדל של `pg_net` (5 שניות), וזה בסדר ל-tick הריק; לנתיב החדש נקבע 30000 במפורש.
+- **5, `notification_log`:** צפוי `0`.
+- **6, האילוץ `push_subscriptions_shape`:** `validated false` צפוי (הוא נוצר `NOT VALID` כדי לבדוק רק שורות חדשות), ו-`true` גם תקין.
+
+
 ## 7. בדיקה מול Supabase מקומי
 
 נעשה, ראה סעיף 1ב: `npm run local:start` מפעיל את הסביבה המלאה של Supabase בתוך Docker (ה-`init` כבר בוצע, והתצורה ב-`app/supabase/config.toml`). ה-RLS נבדק גם על PGlite (`npm test`) וגם על תמונת Supabase האמיתית.

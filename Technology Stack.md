@@ -531,12 +531,14 @@ User data + events
 
 ### 12.2 Execution
 
-`pg_cron` calls `/api/engine/tick` every few minutes with a secret header. The route verifies the secret, runs jobs that are all **idempotent** (unique keys, "already done" checks):
+`pg_cron` calls `/api/engine/tick` every few minutes with a secret header. The route verifies the secret and runs jobs that are all **idempotent** (unique keys, "already done" checks). **Status 2026-10-07:** the tick runs and succeeds, but its job list is still empty. What belongs in it, and what was deliberately moved out:
 
-1. evaluate the engine for each user;
-2. generate the next Shabbat offline periods (weekly);
-3. close the week and generate the weekly summary;
-4. remove stale temporary photos.
+1. evaluate the engine for each user (not built);
+2. ~~generate the next Shabbat offline periods (weekly)~~ moved out of the tick: it has its own route and schedule, `/api/engine/shabbat-topup` (live since 2026-10-02; decision in TODO.md section 0);
+3. ~~close the week and generate the weekly summary~~ dropped as a job: the weekly summary is derived from live data on every read and written only when the owner presses a button (TODO.md section 0, Weekly Learning decisions), so no job precomputes it;
+4. remove stale temporary photos (not built).
+
+The Web Push sender is not part of the tick either. It will be its own route, `/api/engine/notify`, so that it can be switched off independently (planned build order and open decisions: TODO.md section 4).
 
 Whether `pg_cron`-only activity counts as "database activity" against Supabase's inactivity pause is unverified, so the plan does not rely on it: daily use of the app is the keep-alive.
 
