@@ -6,6 +6,8 @@ import { WebPushProvider } from "./webpush";
 const SUBSCRIPTION = { endpoint: "https://push.example.test/e1", p256dh: "k1", auth: "a1" };
 const MESSAGE = { title: "t", body: "b" };
 const VAPID = { NEXT_PUBLIC_VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv", VAPID_SUBJECT: "mailto:a@example.test" };
+const LOCAL = { NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321" };
+const HOSTED = { NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijkl.supabase.co" };
 
 describe("createNotificationProvider", () => {
   it("is null without the VAPID values, in every environment", () => {
@@ -25,23 +27,34 @@ describe("createNotificationProvider", () => {
   it("REFUSES the fake provider in production, even with VAPID values set", () => {
     expect(createNotificationProvider({ env: { PUSH_PROVIDER: "fake" }, nodeEnv: "production" })).toBeNull();
     expect(createNotificationProvider({ env: { ...VAPID, PUSH_PROVIDER: "fake" }, nodeEnv: "production" })).toBeNull();
+    expect(createNotificationProvider({ env: { ...LOCAL, PUSH_PROVIDER: "fake" }, nodeEnv: "production" })).toBeNull();
   });
 
-  it("builds the fake outside production, and it wins over the VAPID values", () => {
+  it("builds the fake outside production against the local Supabase, and it wins over the VAPID values", () => {
     for (const nodeEnv of ["development", "test"]) {
-      expect(createNotificationProvider({ env: { PUSH_PROVIDER: "fake" }, nodeEnv })).toBeInstanceOf(FakeNotificationProvider);
-      expect(createNotificationProvider({ env: { ...VAPID, PUSH_PROVIDER: "fake" }, nodeEnv })).toBeInstanceOf(FakeNotificationProvider);
+      expect(createNotificationProvider({ env: { ...LOCAL, PUSH_PROVIDER: "fake" }, nodeEnv })).toBeInstanceOf(FakeNotificationProvider);
+      expect(createNotificationProvider({ env: { ...LOCAL, ...VAPID, PUSH_PROVIDER: "fake" }, nodeEnv })).toBeInstanceOf(FakeNotificationProvider);
+    }
+  });
+
+  it("REFUSES the fake whenever this server is not on the local Supabase: hosted, missing, empty or look-alike", () => {
+    for (const env of [HOSTED, {}, { NEXT_PUBLIC_SUPABASE_URL: "" }, { NEXT_PUBLIC_SUPABASE_URL: "http://localhost.evil.test:54321" }, { NEXT_PUBLIC_SUPABASE_URL: "not a url" }]) {
+      for (const nodeEnv of ["development", "test"]) {
+        expect(createNotificationProvider({ env: { ...env, PUSH_PROVIDER: "fake" }, nodeEnv }), JSON.stringify(env)).toBeNull();
+        // And a fake that is refused never falls back to a provider that would really send.
+        expect(createNotificationProvider({ env: { ...env, ...VAPID, PUSH_PROVIDER: "fake" }, nodeEnv }), JSON.stringify(env)).toBeNull();
+      }
     }
   });
 
   it("treats any other PUSH_PROVIDER value as the real provider", () => {
     expect(createNotificationProvider({ env: { ...VAPID, PUSH_PROVIDER: "something" }, nodeEnv: "production" })).toBeInstanceOf(WebPushProvider);
-    expect(createNotificationProvider({ env: { PUSH_PROVIDER: "something" }, nodeEnv: "development" })).toBeNull();
+    expect(createNotificationProvider({ env: { ...LOCAL, PUSH_PROVIDER: "something" }, nodeEnv: "development" })).toBeNull();
   });
 
   it("scripts the fake by PUSH_FAKE_BEHAVIOR", async () => {
     const answer = async (behavior: string | undefined) => {
-      const fake = createNotificationProvider({ env: { PUSH_PROVIDER: "fake", PUSH_FAKE_BEHAVIOR: behavior }, nodeEnv: "development" });
+      const fake = createNotificationProvider({ env: { ...LOCAL, PUSH_PROVIDER: "fake", PUSH_FAKE_BEHAVIOR: behavior }, nodeEnv: "development" });
       return fake?.send(SUBSCRIPTION, MESSAGE);
     };
     expect(await answer(undefined)).toEqual(FAKE_RESULTS.ok());

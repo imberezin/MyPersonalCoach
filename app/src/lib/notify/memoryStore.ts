@@ -20,7 +20,7 @@ export interface MemoryPerson {
 
 export type MemoryCall =
   | { method: "listCandidates" }
-  | { method: "loadFact"; userId: string }
+  | { method: "loadFact"; userId: string; now: Date }
   | { method: "loadSendFacts"; userId: string }
   | { method: "claim"; userId: string; momentKey: string }
   | { method: "finish"; userId: string; momentKey: string; state: FinishState }
@@ -58,8 +58,8 @@ export function createMemoryWeeklyPushStore(people: MemoryPerson[], options: Mem
         .slice(0, limit);
     },
 
-    async loadFact(userId) {
-      calls.push({ method: "loadFact", userId });
+    async loadFact(userId, _timeZone, now) {
+      calls.push({ method: "loadFact", userId, now });
       const fact = person(userId)?.fact ?? null;
       return typeof fact === "function" ? fact() : fact;
     },

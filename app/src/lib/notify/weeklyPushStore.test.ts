@@ -249,9 +249,15 @@ describe("finish, deleteSubscription, markSubscriptionSuccess", () => {
   });
 
   it("deletes by user, endpoint AND both keys, so a subscription the browser just saved again with new keys survives", async () => {
-    const { store: s, log } = store({ "push_subscriptions:delete": { data: null, error: null } });
+    const { store: s, log } = store({ "push_subscriptions:delete": { data: [{ id: "row" }], error: null } });
     expect(await s.deleteSubscription(USER, SUB)).toBe(true);
-    expect(log[0].calls).toEqual([["delete"], ["eq", "user_id", USER], ["eq", "endpoint", SUB.endpoint], ["eq", "p256dh", SUB.p256dh], ["eq", "auth", SUB.auth]]);
+    expect(log[0].calls).toEqual([["delete"], ["eq", "user_id", USER], ["eq", "endpoint", SUB.endpoint], ["eq", "p256dh", SUB.p256dh], ["eq", "auth", SUB.auth], ["select", "id"]]);
+  });
+
+  it("does NOT say it deleted when no row matched (the row the browser saved again with new keys stays) or when more than one did", async () => {
+    expect(await store({ "push_subscriptions:delete": { data: [], error: null } }).store.deleteSubscription(USER, SUB)).toBe(false);
+    expect(await store({ "push_subscriptions:delete": { data: [{}, {}], error: null } }).store.deleteSubscription(USER, SUB)).toBe(false);
+    expect(await store({ "push_subscriptions:delete": { data: null, error: null } }).store.deleteSubscription(USER, SUB)).toBe(false);
   });
 
   it("stamps last_success_at on the same four-field match", async () => {

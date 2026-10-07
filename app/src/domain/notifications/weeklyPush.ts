@@ -48,6 +48,10 @@ export function weeklyMomentKey(weekStart: string): string {
  *   quiet hours (a DELAY, not a skip: the same decision is asked again at the next tick, and the card stays up until Wednesday
  *   05:00), and finally a subscription. A missing subscription is checked last and is never claimed, so a device that registers
  *   late in the window still gets the push.
+ * What the delay really allows: with the default quiet hours (00:00 to 08:00) the push can go out from Sunday 08:00 to Tuesday 24:00, about 64
+ * of the card's 72 hours. Wednesday 00:00 to 05:00 is quiet, and at 05:00 the card is gone, so a push that was not sendable by Tuesday night
+ * (an Offline period that ends in those hours, a device that registers then) is not sent that week: silence over pressure, and the card on
+ * Home was there the whole time.
  * Whether a person has had a proactive intervention today is NOT asked: the owner exempted this push from that budget (2026-10-07).
  */
 export function decideWeeklyPush(input: WeeklyPushInput): WeeklyPushDecision {

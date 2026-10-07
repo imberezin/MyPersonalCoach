@@ -87,6 +87,15 @@ export async function runRehearsal(world: RehearsalWorld, behavior: Behavior, lo
     log(`${ok ? "ok  " : "FAIL"} ${step}: ${detail}`);
   };
 
+  // 0. Before anything that can write or send: a DRY request must show that the dev server sees the seeded local user, and so is on the same
+  //    local database as this script. A server pointed anywhere else would answer something else, and the run stops here, with no live call.
+  await world.reset();
+  await world.setClock(clock.send(world));
+  const probe = await world.callRoute("?dryRun=1");
+  const sees = probe.status === 200 && probe.body.mode === "dry" && num(probe.body, "candidates") === 1 && num(probe.body, "due") === 1;
+  check("preflight, a dry request: the dev server sees the seeded local user", sees, `${probe.status}: ${fmt(probe.body)} (expected exactly one person and one push due)`);
+  if (!sees) return checks;
+
   // 1. Before the quiet hours end: nothing is sent, nothing is claimed.
   await world.reset();
   await world.setClock(clock.quiet(world));

@@ -6,7 +6,7 @@ import type { WeeklyHomeFact } from "@/domain/weekly";
 import { FAKE_RESULTS, FakeNotificationProvider } from "@/lib/notifications/fake";
 import type { PushSubscriptionRecord } from "@/lib/notifications/types";
 import { createMemoryWeeklyPushStore, type MemoryPerson, type MemoryStoreOptions } from "./memoryStore";
-import { WEEKLY_PUSH_MAX_SENDS, runWeeklyPush, weeklyPushNeedsAttention } from "./runWeeklyPush";
+import { WEEKLY_PUSH_DEADLINE_MS, WEEKLY_PUSH_MAX_SENDS, WEEKLY_PUSH_PERSON_BUDGET_MS, runWeeklyPush, weeklyPushNeedsAttention } from "./runWeeklyPush";
 import type { PushCandidate, WeeklyPushStore } from "./store";
 
 const U1 = "11111111-1111-4111-8111-111111111111";
@@ -96,7 +96,9 @@ describe("a live tick", () => {
     const [a, b] = await Promise.all([run(), run()]);
     expect(sentCount(provider)).toBe(1);
     expect(a.sent + b.sent).toBe(1);
-    expect(a.skippedBy.already_claimed ?? 0 + (b.skippedBy.already_claimed ?? 0)).toBeGreaterThanOrEqual(0);
+    // The run that lost the claim says so (the claim in memory is a synchronous check-and-set; the real database's atomicity is proven by the unique
+    // constraint tests on PGlite and by the local rehearsal with two parallel requests).
+    expect((a.skippedBy.already_claimed ?? 0) + (b.skippedBy.already_claimed ?? 0)).toBe(1);
   });
 });
 
@@ -280,6 +282,14 @@ describe("what the push service answers", () => {
     expect(sentCount(provider)).toBe(1);
   });
 
+  it("one dead phone and one refused phone, none accepted: the claim is send_failed (not subscription_gone), and only the dead one is deleted", async () => {
+    const { mem, run } = setup([person(U1, { subscriptions: [SUB_A, SUB_B] })], {}, scripted((s) => (s.endpoint === SUB_A.endpoint ? FAKE_RESULTS.gone(410) : FAKE_RESULTS.rejected(403))));
+    const summary = await run();
+    expect(summary).toMatchObject({ sent: 0, notSent: 1, subscriptionsDeleted: 1 });
+    expect(mem.claims.get(`${U1}|${MOMENT}`)?.reason).toBe("send_failed");
+    expect(mem.subscriptions.get(U1)).toEqual([SUB_B]);
+  });
+
   it("an accepted push and a refused one: sent, nothing deleted", async () => {
     const { mem, run } = setup([person(U1, { subscriptions: [SUB_A, SUB_B] })], {}, scripted((s) => (s.endpoint === SUB_A.endpoint ? FAKE_RESULTS.ok() : FAKE_RESULTS.rejected(403))));
     const summary = await run();
@@ -345,12 +355,13 @@ describe("when a write fails", () => {
 });
 
 describe("the limits of a run, and a run that never throws", () => {
-  it("stops after the send cap", async () => {
-    const ids = Array.from({ length: WEEKLY_PUSH_MAX_SENDS + 2 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
+  it("stops after the send cap, which is five", async () => {
+    expect(WEEKLY_PUSH_MAX_SENDS).toBe(5);
+    const ids = Array.from({ length: 7 }, (_, i) => `00000000-0000-4000-8000-00000000000${i}`);
     const { provider, run } = setup(ids.map((id, i) => person(id, { subscriptions: [{ ...SUB_A, endpoint: `${SUB_A.endpoint}-${i}` }] })));
     const summary = await run();
-    expect(summary).toMatchObject({ aborted: "send_cap", sent: WEEKLY_PUSH_MAX_SENDS });
-    expect(sentCount(provider)).toBe(WEEKLY_PUSH_MAX_SENDS);
+    expect(summary).toMatchObject({ aborted: "send_cap", sent: 5 });
+    expect(sentCount(provider)).toBe(5);
     expect(weeklyPushNeedsAttention(summary)).toBe(true);
   });
 
@@ -386,6 +397,62 @@ describe("the limits of a run, and a run that never throws", () => {
     const summary = await runWeeklyPush(flaky, provider, { now: SUNDAY_0805, live: true });
     expect(summary).toMatchObject({ failed: 1, sent: 1, candidates: 2 });
     expect(provider.sent).toHaveLength(1);
+  });
+});
+
+describe("a person's push is bounded by the run, and reads the card at the time it really is", () => {
+  it("sends to every device of one person at the same time, so the person takes as long as the slowest device and not the sum", async () => {
+    const subs = [SUB_A, SUB_B, { ...SUB_A, endpoint: "https://web.push.apple.com/ccc" }];
+    const started: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // A provider whose every send waits for a gate that opens only when ALL three sends have started: a loop that sends one after the
+    // other would wait forever for the second, so this test would time out instead of passing.
+    const provider = {
+      async send(subscription: PushSubscriptionRecord) {
+        started.push(subscription.endpoint);
+        if (started.length === subs.length) release();
+        await gate;
+        return FAKE_RESULTS.ok();
+      },
+    };
+    const mem = createMemoryWeeklyPushStore([person(U1, { subscriptions: subs })]);
+    const summary = await runWeeklyPush(mem.store, provider, { now: SUNDAY_0805, live: true });
+    expect(started).toHaveLength(3);
+    expect(summary).toMatchObject({ sent: 1, results: { ok: 3 } });
+  });
+
+  it("reads the card again at the time it is when it asks, not at the time the run started", async () => {
+    let elapsed = 0;
+    const mem = createMemoryWeeklyPushStore([person()]);
+    const provider = new FakeNotificationProvider();
+    // The clock the run uses moves 4 s each time it is asked, so the re-read happens later than the start of the run.
+    await runWeeklyPush(mem.store, provider, { now: SUNDAY_0805, live: true, nowMs: () => (elapsed += 4_000), deadlineMs: 600_000 });
+    const reads = mem.calls.filter((c): c is Extract<(typeof mem.calls)[number], { method: "loadFact" }> => c.method === "loadFact");
+    expect(reads).toHaveLength(2);
+    expect(reads[0].now.getTime()).toBe(SUNDAY_0805.getTime());
+    expect(reads[1].now.getTime()).toBeGreaterThan(SUNDAY_0805.getTime());
+  });
+
+  it("starts no push, and claims nothing, when too little of the run's time is left to finish it (the next tick picks it up)", async () => {
+    expect(WEEKLY_PUSH_DEADLINE_MS - WEEKLY_PUSH_PERSON_BUDGET_MS).toBeGreaterThan(0);
+    const provider = new FakeNotificationProvider();
+    const mem = createMemoryWeeklyPushStore([person(U1), person(U2)]);
+    let t = 0;
+    // The clock moves 3 s each time the run looks at it. The run looks at it once at the start, then before each person, before each claim and
+    // for the re-read: the first person is claimed at 6 s into the run (inside the 10 s a claim may begin), the second would begin at 15 s.
+    const summary = await runWeeklyPush(mem.store, provider, { now: SUNDAY_0805, live: true, nowMs: () => (t += 3_000) });
+    expect(summary).toMatchObject({ sent: 1, notSent: 0, aborted: "deadline", candidates: 2 });
+    expect(mem.called("claim")).toBe(1);
+    expect(mem.claims.has(`${U2}|${MOMENT}`)).toBe(false);
+    // A run that starts late enough claims no one at all.
+    const late = createMemoryWeeklyPushStore([person(U1)]);
+    let u = 0;
+    const lateSummary = await runWeeklyPush(late.store, provider, { now: SUNDAY_0805, live: true, nowMs: () => (u += WEEKLY_PUSH_DEADLINE_MS - WEEKLY_PUSH_PERSON_BUDGET_MS) });
+    expect(lateSummary).toMatchObject({ aborted: "deadline", sent: 0, notSent: 0 });
+    expect(late.writes()).toHaveLength(0);
   });
 });
 

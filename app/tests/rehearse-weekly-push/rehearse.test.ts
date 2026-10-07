@@ -162,14 +162,15 @@ describe("the rehearsal timeline", () => {
     const checks = await runRehearsal(world, behavior, (line) => lines.push(line));
     const failed = checks.filter((c) => !c.ok).map((c) => `${c.step}: ${c.detail}`);
     expect(failed).toEqual([]);
-    expect(checks.length).toBe(14);
-    expect(lines).toHaveLength(14);
+    expect(checks.length).toBe(15);
+    expect(lines).toHaveLength(15);
   });
 
   it("covers the quiet morning, the single send, the ticks after, the closed window, the overlap, the opened card, Offline, the preference and the dry run", async () => {
     const { world } = memoryWorld("ok");
     const steps = (await runRehearsal(world, "ok", () => {})).map((c) => c.step);
     expect(steps).toEqual([
+      "preflight, a dry request: the dev server sees the seeded local user",
       "06:00, quiet hours",
       "06:00, nothing claimed",
       "08:05, the push service answers ok",
@@ -202,6 +203,22 @@ describe("the rehearsal timeline", () => {
     const failed = checks.filter((c) => !c.ok).map((c) => c.step);
     expect(failed).toContain("06:00, quiet hours");
     expect(failed).toContain("06:00, nothing claimed");
+  });
+
+  it("stops BEFORE any live call when the dev server does not see the seeded user (it points at some other database)", async () => {
+    const { world } = memoryWorld("ok");
+    const calls: string[] = [];
+    const blind: RehearsalWorld = {
+      ...world,
+      async callRoute(query = "") {
+        calls.push(query);
+        return { status: 200, body: { ok: true, mode: "dry", candidates: 0, due: 0, skippedBy: {} } };
+      },
+    };
+    const checks = await runRehearsal(blind, "ok", () => {});
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatchObject({ ok: false });
+    expect(calls).toEqual(["?dryRun=1"]);
   });
 
   it("detects a push service that answers differently from what the dev server was told to", async () => {

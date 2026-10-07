@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NOT_SNOOZED } from "../firstWeekFlow/types";
 import { resolveHome, type HomeFacts, type HomeStateKey } from "../home";
@@ -208,8 +210,17 @@ describe("decideWeeklyPush: it never throws", () => {
 });
 
 describe("the weekly push constants", () => {
-  it("is exempt from the daily budget (the owner's decision of 2026-10-07)", () => {
+  it("is exempt from the daily budget (the owner's decision of 2026-10-07): written down, and the decision asks nothing about a budget", () => {
     expect(WEEKLY_PUSH.countsTowardDailyBudget).toBe(false);
+    const source = (file: string) =>
+      readFileSync(join(process.cwd(), "src", "domain", "notifications", file), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+    for (const file of ["weeklyPush.ts", "reasons.ts"]) {
+      expect(source(file), file).not.toMatch(/from\s+["'][^"']*(interventions|engine|budget|cooldown)/i);
+    }
+    // The decision itself never mentions a budget: there is no input, no gate and no reason about it.
+    expect(source("weeklyPush.ts")).not.toMatch(/budget/i);
   });
 
   it("is the weekly_summary kind, and the five kinds are the five preference keys", () => {
@@ -258,11 +269,11 @@ describe("the push and the Home card never disagree", () => {
   const SHABBAT_AFTER: OfflinePeriod = { type: "SHABBAT", start: new Date("2026-10-23T14:10:00Z"), end: new Date("2026-10-24T15:25:00Z") };
   const periods = [SHABBAT_BEFORE, SHABBAT_AFTER];
 
-  function homeFacts(now: Date): HomeFacts {
+  function homeFacts(now: Date, offlinePeriods: readonly OfflinePeriod[] = periods): HomeFacts {
     return {
       now,
       timeZone: TZ,
-      offlinePeriods: periods,
+      offlinePeriods,
       hasAnyReport: true,
       lifecycle: "WEEKLY_CYCLE",
       firstWeek: null,
@@ -289,8 +300,35 @@ describe("the push and the Home card never disagree", () => {
       expect(PUSH_FOR_HOME_STATE[home.state.key], `${now.toISOString()} shows ${home.state.key}`).toBe(true);
       expect(isQuiet(DEFAULT_QUIET, localMinuteOfDay(now, TZ)), now.toISOString()).toBe(false);
     }
-    // Not vacuous: from Sunday 08:00 to Wednesday 04:30 there are plenty of instants outside the quiet window.
+    // Not vacuous: from Sunday 08:00 to Tuesday midnight there are plenty of instants outside the quiet window (Wednesday 00:00 to 05:00 is quiet).
     expect(sends).toBeGreaterThan(40);
+  });
+
+  it("agrees with Home while an Offline period covers part of the week, and the push waits it out", () => {
+    const monday: OfflinePeriod = { type: "USER_DEFINED", start: new Date("2026-10-18T21:00:00Z"), end: new Date("2026-10-19T21:00:00Z") }; // all of Monday, local time
+    const withMonday = [...periods, monday];
+    let sends = 0;
+    let waited = 0;
+    for (const now of instants) {
+      const decision = decide({ now, periods: withMonday });
+      if (now >= monday.start && now < monday.end) {
+        expect(decision, now.toISOString()).toEqual({ kind: "SKIP", reason: "offline" });
+        expect(resolveHome(homeFacts(now, withMonday)).state.key, now.toISOString()).toBe("SILENCE");
+        waited += 1;
+        continue;
+      }
+      if (decision.kind !== "SEND") continue;
+      sends += 1;
+      expect(PUSH_FOR_HOME_STATE[resolveHome(homeFacts(now, withMonday)).state.key], now.toISOString()).toBe(true);
+    }
+    expect(waited).toBe(48);
+    expect(sends).toBeGreaterThan(20);
+  });
+
+  it("has its last chance on Tuesday night: Wednesday 04:00 is quiet and at 05:00 there is no card", () => {
+    expect(at("2026-10-20T20:59:00Z")).toEqual({ kind: "SEND", momentKey: "weekly:2026-10-11" }); // Tuesday 23:59
+    expect(at("2026-10-20T21:00:00Z")).toEqual({ kind: "SKIP", reason: "quiet_hours" }); // Wednesday 00:00
+    expect(at("2026-10-21T01:00:00Z")).toEqual({ kind: "SKIP", reason: "quiet_hours" }); // Wednesday 04:00, the card is still up
   });
 
   it("allows the push for exactly one of the Home states", () => {

@@ -139,8 +139,19 @@ describe("POST /api/engine/notify: it fails closed", () => {
     expect(mocks.runWeeklyPush.mock.calls[0][2].live).toBe(false);
   });
 
-  it("never lets the query raise the mode: ?dryRun=0 and ?live=1 do not turn sending on", async () => {
-    for (const query of ["?dryRun=0", "?live=1", "?dryRun=false&live=true"]) {
+  it.each([["?dryRun=1"], ["?dryRun=true"], ["?dryRun=yes"], ["?dryRun=0"], ["?dryRun="], ["?dryRun"], ["?DryRun=1"], ["?DRYRUN=false"], ["?live=1&dryRun=0"]])(
+    "lowers a live setting to a dry run for any dryRun parameter, whatever its value or spelling: %s",
+    async (query) => {
+      vi.stubEnv("NOTIFY_SENDER_LIVE", "1");
+      const { body } = await call(authed(query));
+      expect(body, query).toMatchObject({ mode: "dry" });
+      expect(mocks.createNotificationProvider).not.toHaveBeenCalled();
+      expect(mocks.runWeeklyPush.mock.calls[0][2].live).toBe(false);
+    },
+  );
+
+  it("never lets the query raise the mode: ?live=1 and the like do not turn sending on", async () => {
+    for (const query of ["?live=1", "?live=true&send=1", "?mode=live"]) {
       mocks.runWeeklyPush.mockClear();
       const { body } = await call(authed(query));
       expect(body, query).toMatchObject({ mode: "dry" });

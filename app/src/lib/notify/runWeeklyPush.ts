@@ -8,8 +8,14 @@ export const WEEKLY_PUSH_PAGE_SIZE = 50;
 export const WEEKLY_PUSH_MAX_USERS = 100;
 /** A small run-level brake: this app has one person, and a bug must not become a flood. */
 export const WEEKLY_PUSH_MAX_SENDS = 5;
-/** Inside the route's maxDuration of 30 s: leaves 8 s for the person in flight and the response. */
+/** Inside the route's maxDuration of 30 s: the run starts no new person after this, and leaves 8 s for the response. */
 export const WEEKLY_PUSH_DEADLINE_MS = 22_000;
+/**
+ * What one person's push may take once it is claimed: the card re-read, the claim, every subscription at once (each is bounded to 10 s by the
+ * provider, so the slowest bounds them all) and closing the claim. A person is started only while this much of the run's deadline is left, so
+ * a claim is never begun that the platform could cut off before it is closed (22 s - 12 s = 10 s into the run at the latest).
+ */
+export const WEEKLY_PUSH_PERSON_BUDGET_MS = 12_000;
 
 export type WeeklyPushAbort = "candidates_failed" | "migration_missing" | "deadline" | "user_cap" | "send_cap";
 
@@ -25,7 +31,10 @@ export interface WeeklyPushSummary {
   notSent: number;
   /** Subscriptions deleted because the push service said 404 or 410. */
   subscriptionsDeleted: number;
-  /** One count per subscription a push was attempted on. */
+  /**
+   * One count per subscription a push was attempted on: ok, gone, rejected and retryable sum to the attempts. `providerThrew` is a part of
+   * `retryable` (a provider that breaks its contract by throwing is counted as a temporary failure), not a fifth kind.
+   */
   results: { ok: number; gone: number; rejected: number; retryable: number; providerThrew: number };
   /** The sum of skippedBy. */
   skipped: number;
@@ -149,10 +158,14 @@ export async function runWeeklyPush(
     subscriptions: PushSubscriptionRecord[],
   ): Promise<WeeklyPushAbort | undefined> {
     if (summary.sent + summary.notSent >= maxSends) return "send_cap";
+    // Nothing is claimed unless the whole push can finish inside the run's deadline; the next tick picks it up.
+    if (clock() - startedAt > deadlineMs - WEEKLY_PUSH_PERSON_BUDGET_MS) return "deadline";
 
     // The person may have opened the card, or put it away for a day, since the decision. Asked BEFORE the claim, so a push that
     // is held back is not used up: if the card comes back inside its window, a later tick still sends it.
-    const again = await store.loadFact(candidate.userId, candidate.timeZone, now);
+    // At the instant it is NOW, not the instant the run started: a snooze made since then is dated after `now` and would be ignored.
+    const rereadAt = new Date(now.getTime() + Math.max(0, clock() - startedAt));
+    const again = await store.loadFact(candidate.userId, candidate.timeZone, rereadAt);
     if (again === null || again.weekStart !== fact.weekStart || !again.card) return void skip(again === null ? "no_moment" : "card_closed");
 
     const claim = await store.claim(candidate.userId, momentKey, now);
@@ -165,26 +178,28 @@ export async function runWeeklyPush(
 
     // Claimed: from here the push is never sent twice, whatever happens next.
     const message = buildWeeklySummaryPush({ language: candidate.language, weekStart: fact.weekStart });
-    let accepted = 0;
-    let gone = 0;
-    for (const subscription of subscriptions) {
-      let result: SendResult;
-      try {
-        result = await push.send(subscription, message);
-      } catch {
-        console.error("Weekly push: the provider threw");
-        summary.results.providerThrew += 1;
-        result = THREW;
-      }
-      summary.results[result.outcome] += 1;
-      if (result.ok) {
-        accepted += 1;
-        await store.markSubscriptionSuccess(candidate.userId, subscription, now);
-      } else if (result.outcome === "gone") {
-        gone += 1;
-        if (await store.deleteSubscription(candidate.userId, subscription)) summary.subscriptionsDeleted += 1;
-      }
-    }
+    // Every device at once: the person's time is the slowest single send (each is bounded to 10 s by the provider), not their sum.
+    const outcomes = await Promise.all(
+      subscriptions.map(async (subscription): Promise<SendResult["outcome"]> => {
+        let result: SendResult;
+        try {
+          result = await push.send(subscription, message);
+        } catch {
+          console.error("Weekly push: the provider threw");
+          summary.results.providerThrew += 1;
+          result = THREW;
+        }
+        summary.results[result.outcome] += 1;
+        if (result.ok) {
+          await store.markSubscriptionSuccess(candidate.userId, subscription, now);
+        } else if (result.outcome === "gone") {
+          if (await store.deleteSubscription(candidate.userId, subscription)) summary.subscriptionsDeleted += 1;
+        }
+        return result.outcome;
+      }),
+    );
+    const accepted = outcomes.filter((o) => o === "ok").length;
+    const gone = outcomes.filter((o) => o === "gone").length;
 
     const state: FinishState = accepted > 0 ? "sent" : gone === subscriptions.length ? "subscription_gone" : "send_failed";
     // If the claim cannot be closed it stays 'pending': counted as stuck so that it is seen, and still never sent again.

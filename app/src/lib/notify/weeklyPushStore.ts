@@ -115,18 +115,20 @@ export function createSupabaseWeeklyPushStore(admin: SupabaseClient): WeeklyPush
       try {
         // All of user, endpoint and BOTH keys: the browser may have just saved the same endpoint again with new keys (an upsert on
         // the endpoint), and that fresh row must survive a delete that was decided on the old one.
-        const { error } = await admin
+        const { data, error } = await admin
           .from("push_subscriptions")
           .delete()
           .eq("user_id", userId)
           .eq("endpoint", subscription.endpoint)
           .eq("p256dh", subscription.p256dh)
-          .eq("auth", subscription.auth);
+          .eq("auth", subscription.auth)
+          .select("id");
         if (error) {
           console.error("Weekly push: deleting a dead subscription failed", error.code ?? "no_code");
           return false;
         }
-        return true;
+        // Zero rows is not a deletion: the browser may have saved the same endpoint again with new keys, and that row stays.
+        return Array.isArray(data) && data.length === 1;
       } catch {
         console.error("Weekly push: deleting a dead subscription threw");
         return false;

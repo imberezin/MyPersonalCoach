@@ -61,7 +61,7 @@ export interface WeeklyPushStore {
   claim(userId: string, momentKey: string, now: Date): Promise<ClaimResult>;
   /** Ends the claim. true when exactly the claimed row was updated. Never throws. */
   finish(userId: string, momentKey: string, state: FinishState, now: Date): Promise<boolean>;
-  /** Deletes the ONE matching row (user, endpoint, p256dh and auth). true on success. Never throws. */
+  /** Deletes the ONE matching row (user, endpoint, p256dh and auth). true only when exactly that row was deleted. Never throws. */
   deleteSubscription(userId: string, subscription: PushSubscriptionRecord): Promise<boolean>;
   /** Stamps last_success_at on the matching row. true on success. Never throws. */
   markSubscriptionSuccess(userId: string, subscription: PushSubscriptionRecord, now: Date): Promise<boolean>;

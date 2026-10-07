@@ -15,7 +15,11 @@ void allKindsListed;
 /** The weekly summary push: the only notification the sender knows so far (decisions of 2026-10-07, TODO.md section 4). */
 export const WEEKLY_PUSH = {
   kind: "weekly_summary",
-  /** Owner's decision: this push is NOT one of the daily proactive interventions, so it never uses (or blocks) that slot. */
+  /**
+   * Owner's decision: this push is NOT one of the daily proactive interventions, so it never uses (or blocks) that slot. Today this is a
+   * written decision, not code that enforces it: the decision function asks nothing about a budget (a test pins that it imports none), and no
+   * daily budget exists yet. When one is built it must read this, and a test THERE must prove a weekly_summary push is not counted.
+   */
   countsTowardDailyBudget: false,
   /** notification_log.moment_key is this prefix plus the week's local Sunday (equal to weekly_summaries.week_start). */
   momentPrefix: "weekly:",
