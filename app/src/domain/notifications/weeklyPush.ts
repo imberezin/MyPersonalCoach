@@ -36,6 +36,11 @@ export type WeeklyPushDecision = { kind: "SEND"; momentKey: string } | { kind: "
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
+/** The moment key of the push for the week that starts on the local Sunday `weekStart` (notification_log.moment_key). */
+export function weeklyMomentKey(weekStart: string): string {
+  return `${WEEKLY_PUSH.momentPrefix}${weekStart}`;
+}
+
 /**
  * The weekly summary push. Pure and total: it never throws, whatever it is given. It is a SEND only when every gate is open,
  * and the first closed gate names the reason, in this order:
@@ -68,5 +73,5 @@ export function decideWeeklyPush(input: WeeklyPushInput): WeeklyPushDecision {
 
   if (!(input.subscriptionCount > 0)) return skip("no_subscription");
 
-  return { kind: "SEND", momentKey: `${WEEKLY_PUSH.momentPrefix}${fact.weekStart}` };
+  return { kind: "SEND", momentKey: weeklyMomentKey(fact.weekStart) };
 }

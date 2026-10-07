@@ -10,6 +10,7 @@ import {
   WEEKLY_PUSH,
   WEEKLY_PUSH_SKIP_REASONS,
   decideWeeklyPush,
+  weeklyMomentKey,
   type WeeklyPushInput,
   type WeeklyPushSkipReason,
 } from "./index";
@@ -223,6 +224,11 @@ describe("the weekly push constants", () => {
       expect(decision.momentKey).toMatch(/^weekly:\d{4}-\d{2}-\d{2}$/);
       expect(decision.momentKey.length).toBeLessThanOrEqual(80);
     }
+  });
+
+  it("builds the moment key from the week, the same one a send carries", () => {
+    expect(weeklyMomentKey("2026-10-11")).toBe("weekly:2026-10-11");
+    expect(decide()).toEqual({ kind: "SEND", momentKey: weeklyMomentKey(CARD.weekStart) });
   });
 
   it("has a reason list without duplicates", () => {
